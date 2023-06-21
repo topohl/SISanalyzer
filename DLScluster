@@ -1,0 +1,749 @@
+# Install necessary packages
+install.packages(c("ggplot2", "cowplot", "colorspace", "dplyr", "factoextra", "FactoMineR", "kernlab", "readxl", "tidyr", "GGally", "topicmodels", "missMDA", "lda", "MASS", "broom", "missForest"))
+
+# Load necessary packages
+library(ggplot2)
+library(cowplot)
+library(colorspace)
+library(dplyr)
+library(factoextra)
+library(FactoMineR)
+library(kernlab)
+library(readxl)
+library(tidyr)
+library(topicmodels)
+library(missMDA)
+library(lda)
+
+# Read in data
+E9_Behavior_Data <- read_excel("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx", sheet = "DLSsingle")
+
+# Define a function to extract optimal number of PCs
+get_optimal_pcs <- function(pca_obj) {
+  # Get the percentage of variance explained by each PC
+  var_prop <- pca_obj$eig / sum(pca_obj$eig)
+  
+  # Calculate cumulative proportion of variance explained
+  cum_var_prop <- cumsum(var_prop)
+  
+  # Find the number of PCs needed to explain 95% of the variance
+  num_pcs <- min(which(cum_var_prop >= 0.95))
+  
+  # Return the optimal number of PCs
+  return(num_pcs)
+}
+
+# Run PCA and extract optimal number of PCs
+DLSzscore <- PCA(E9_Behavior_Data[,c(-1:-2)], graph = FALSE)
+optimal_pcs <- get_optimal_pcs(DLSzscore)
+
+# Define color palette
+group_cols <- c("#1e3791","#00ac8c")
+
+# Plot PCA with optimal number of PCs
+fviz_pca_ind(DLSzscore, 
+             label = "none", 
+             habillage = as.factor(E9_Behavior_Data$Group), 
+             palette = group_cols, 
+             addEllipses = TRUE, 
+             axes = c(1, 2), # only plot PC1 and PC2 on x and y axis
+             choose.var = optimal_pcs # plot optimal number of PCs
+)
+
+# Generate variable contribution plots for the first 5 principal components
+for (i in 1:5) {
+  var_contrib <- fviz_contrib(DLSzscore, choice = "var", axes = i, top = 10)
+  print(var_contrib)
+}
+
+# Plot the variable contribution plot
+print(var_contrib)
+
+
+###############################################################################
+# Perform k-means clustering on the PCA scores
+
+library(NbClust)
+
+fviz_nbclust(DLSzscore, kmeans, method = "wss") +
+  geom_vline(xintercept = 4, linetype = 2)+
+  labs(subtitle = "Elbow method")
+
+
+k <- 2  # number of clusters
+set.seed(123)  # for reproducibility
+kmeans_result <- kmeans(DLSzscore$ind$coord[,1:2], centers = k)
+
+# Create an empty plot
+library(factoextra)
+library(ggplot2)
+library(GGally)
+library(dplyr)
+library(GGally)
+
+# Create parallel coordinates plot
+parallel_coord <- ggparcoord(DLSzscore$ind$coord, columns = 1:4, groupColumn = "cluster",
+                             showPoints = TRUE, alphaLines = 0.5, alphaPoints = 0.5) +
+  theme_minimal() +
+  theme(legend.position = "none",
+        plot.margin = unit(c(1, 1, 1, 1), "cm"))
+
+# Create k-means clustering plot
+pca_plot <- fviz_cluster(list(data = DLSzscore$ind$coord[,1:2], cluster = kmeans_result$cluster),
+                         label = "none", # hide individual labels
+                         geom = "point",
+                         ellipse.type = "convex",
+                         palette = c("#00ac8c", "#1e3791", "#3e6481"),
+                         main = paste("k-means clustering (k =", k, ")"),
+                         addlabels = FALSE
+) + theme_minimal() +
+  theme(plot.margin = unit(c(1, 1, 1, 1), "cm"),
+        legend.position = "top",
+        legend.justification = "right",
+        legend.margin = margin(t = 0, r = 0, b = 0, l = 0)) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+# Add labels for the individual IDs
+text(DLSzscore$ind$coord[,1], DLSzscore$ind$coord[,2], labels = E9_Behavior_Data$ID)
+
+# Show the plot
+pca_plot
+
+
+# Biplot of PCA
+fviz_pca_biplot(DLSzscore, repel = TRUE)
+
+
+
+fviz_nbclust(DLSzscore, kmeans, method = 'wss')
+
+
+
+
+
+
+
+
+
+
+
+# Load required libraries
+library(factoextra)
+library(ggplot2)
+library(dplyr)
+
+# Perform k-means clustering for different values of k
+k_values <- 1:10  # Range of values for k
+wss <- numeric(length(k_values))  # Initialize within-cluster sum of squares
+sil <- numeric(length(k_values))  # Initialize silhouette scores
+
+for (i in seq_along(k_values)) {
+  set.seed(123)  # For reproducibility
+  kmeans_result <- kmeans(DLSzscore$ind$coord[,1:2], centers = k_values[i])
+  wss[i] <- kmeans_result$tot.withinss
+  sil[i] <- silhouette(kmeans_result$cluster, dist(DLSzscore$ind$coord[,1:2]))$avg.width
+}
+
+# Plot within-cluster sum of squares (Elbow method)
+plot(k_values, wss, type = "b", pch = 19, frame = FALSE, 
+     xlab = "Number of Clusters (k)", ylab = "Within-cluster Sum of Squares")
+title("Elbow Method")
+
+# Plot silhouette scores
+plot(k_values, sil, type = "b", pch = 19, frame = FALSE, 
+     xlab = "Number of Clusters (k)", ylab = "Silhouette Score")
+title("Silhouette Analysis")
+
+# Determine the ideal number of clusters using the elbow method or silhouette scores
+# Adjust the following code based on the chosen method
+
+# Elbow method - find the "elbow" point where the decrease in wss starts to flatten
+elbow_point <- 2  # Update with the identified elbow point
+
+# Silhouette analysis - find the maximum silhouette score
+max_sil_index <- which.max(sil)
+optimal_k <- k_values[max_sil_index]
+
+# Perform clustering with the ideal number of clusters
+set.seed(123)  # For reproducibility
+kmeans_result <- kmeans(DLSzscore$ind$coord[,1:2], centers = optimal_k)
+
+# Create parallel coordinates plot
+parallel_coord <- ggparcoord(DLSzscore$ind$coord, columns = 1:4, groupColumn = "cluster",
+                             showPoints = TRUE, alphaLines = 0.5, alphaPoints = 0.5) +
+  theme_minimal() +
+  theme(legend.position = "none",
+        plot.margin = unit(c(1, 1, 1, 1), "cm"))
+
+# Create k-means clustering plot
+pca_plot <- fviz_cluster(list(data = DLSzscore$ind$coord[,1:2], cluster = kmeans_result$cluster),
+                         label = "none", # hide individual labels
+                         geom = "point",
+                         ellipse.type = "convex",
+                         palette = c("#00ac8c", "#1e3791", "#3e6481"),
+                         main = paste("k-means clustering (k =", optimal_k, ")"),
+                         addlabels = FALSE
+) + theme_minimal() +
+  theme(plot.margin = unit(c(1, 1, 1, 1), "cm"),
+        legend.position = "top",
+        legend.justification = "right",
+        legend.margin = margin(t = 0, r = 0, b = 0, l = 0)) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+# Add labels for the individual IDs
+# Add labels for the individual IDs
+text(DLSzscore$ind$coord[,1], DLSzscore$ind$coord[,2], labels = DLSzscore$ind$ID)
+
+# Show the plot
+pca_plot
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Load required libraries
+library(factoextra)
+library(ggplot2)
+library(dplyr)
+library(cluster)
+library(fpc)
+library(dbscan)
+
+# Perform k-means clustering for different values of k
+k_values <- 1:10  # Range of values for k
+wss <- numeric(length(k_values))  # Initialize within-cluster sum of squares
+sil <- numeric(length(k_values))  # Initialize silhouette scores
+
+for (i in seq_along(k_values)) {
+  set.seed(123)  # For reproducibility
+  kmeans_result <- kmeans(DLSzscore$ind$coord[,1:2], centers = k_values[i])
+  wss[i] <- kmeans_result$tot.withinss
+  sil[i] <- silhouette(kmeans_result$cluster, dist(DLSzscore$ind$coord[,1:2]))$avg.width
+}
+
+# Plot within-cluster sum of squares (Elbow method)
+plot(k_values, wss, type = "b", pch = 19, frame = FALSE, 
+     xlab = "Number of Clusters (k)", ylab = "Within-cluster Sum of Squares")
+title("Elbow Method")
+
+# Plot silhouette scores
+plot(k_values, sil, type = "b", pch = 19, frame = FALSE, 
+     xlab = "Number of Clusters (k)", ylab = "Silhouette Score")
+title("Silhouette Analysis")
+
+# Determine the ideal number of clusters using the silhouette analysis
+optimal_k <- k_values[which.max(sil)]
+
+# Perform clustering with the ideal number of clusters using k-means
+set.seed(123)  # For reproducibility
+kmeans_result <- kmeans(DLSzscore$ind$coord[,1:2], centers = optimal_k)
+
+# Create parallel coordinates plot
+parallel_coord <- ggparcoord(DLSzscore$ind$coord, columns = 1:4, groupColumn = "cluster",
+                             showPoints = TRUE, alphaLines = 0.5, alphaPoints = 0.5) +
+  theme_minimal() +
+  theme(legend.position = "none",
+        plot.margin = unit(c(1, 1, 1, 1), "cm"))
+
+# Create k-means clustering plot
+pca_plot <- fviz_cluster(list(data = DLSzscore$ind$coord[,1:2], cluster = kmeans_result$cluster),
+                         label = "none", # hide individual labels
+                         geom = "point",
+                         ellipse.type = "convex",
+                         palette = c("#00ac8c", "#1e3791", "#3e6481"),
+                         main = paste("k-means clustering (k =", optimal_k, ")"),
+                         addlabels = FALSE
+) + theme_minimal() +
+  theme(plot.margin = unit(c(1, 1, 1, 1), "cm"),
+        legend.position = "top",
+        legend.justification = "right",
+        legend.margin = margin(t = 0, r = 0, b = 0, l = 0)) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+# Add labels for the individual IDs
+text(DLSzscore$ind$coord[,1], DLSzscore$ind$coord[,2], labels = DLSzscore$ind$ID)
+
+# Show the plot
+pca_plot
+
+# Perform DBSCAN clustering
+dbscan_result <- dbscan(DLSzscore$ind$coord[, 1:2], eps = 0.5, minPts = 5)
+
+# Create DBSCAN clustering plot
+dbscan_plot <- fviz_cluster(
+  list(data = DLSzscore$ind$coord[, 1:2], cluster = dbscan_result$cluster),
+  label = "none", # hide individual labels
+  geom = "point",
+  main = "DBSCAN Clustering",
+  palette = c("#00ac8c", "#1e3791", "#3e6481")
+) + theme_minimal() +
+  theme(
+    plot.margin = unit(c(1, 1, 1, 1), "cm"),
+    legend.position = "top",
+    legend.justification = "right",
+    legend.margin = margin(t = 0, r = 0, b = 0, l = 0)
+  ) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+
+# Add labels for the individual IDs
+text(DLSzscore$ind$coord[, 1], DLSzscore$ind$coord[, 2], labels = DLSzscore$ind$ID)
+
+# Show the plot
+dbscan_plot
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+library(factoextra)
+library(gridExtra)
+library(cluster)
+library(cowplot)
+
+# Standardize the data
+DLSzscore <- scale(E9_Behavior_Data[,5:8])
+
+# Perform k-means clustering for different values of k
+wss <- sapply(1:10, function(k) kmeans(DLSzscore, centers=k)$tot.withinss)
+
+# Plot the WSS for each value of k
+plot(1:10, wss, type="b", xlab="Number of clusters (k)", ylab="Within-cluster sum of squares")
+
+# Identify the elbow point
+elbow <- kElbowPlot(wss, ndims = 1)
+
+# Re-run k-means clustering with the identified number of clusters
+k <- elbow$Best_nc
+set.seed(123)
+kmeans_result <- kmeans(DLSzscore, centers = k)
+
+# Create parallel coordinates plot
+parallel_coord <- ggparcoord(DLSzscore, columns = 1:4, groupColumn = "cluster",
+                             showPoints = TRUE, alphaLines = 0.5) +
+  theme_minimal() +
+  theme(legend.position = "none",
+        plot.margin = unit(c(1, 1, 1, 1), "cm"))
+
+# Create k-means clustering plot
+pca_plot <- fviz_cluster(list(data = DLSzscore, cluster = kmeans_result$cluster),
+                         label = "none", # hide individual labels
+                         geom = "point",
+                         ellipse.type = "convex",
+                         palette = c("#00ac8c", "#1e3791", "#3e6481"),
+                         main = paste("k-means clustering (k =", k, ")"),
+                         addlabels = FALSE
+) + theme_minimal() +
+  theme(plot.margin = unit(c(1, 1, 1, 1), "cm"),
+        legend.position = "top",
+        legend.justification = "right",
+        legend.margin = margin(t = 0, r = 0, b = 0, l = 0)) +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())
+
+# Add labels for the individual IDs
+text(DLSzscore[,1], DLSzscore[,2], labels = E9_Behavior_Data$ID)
+
+# Create a plot of variable contributions
+contrib_plot <- fviz_contrib(kmeans_result, choice = "var", axes = 1:2)
+
+# Arrange the plots in a grid
+grid_arrange_shared_legend(pca_plot, parallel_coord, contrib_plot, ncol = 3, widths = c(2, 2, 1))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Load necessary packages
+library(ggplot2)
+library(cowplot)
+library(colorspace)
+library(dplyr)
+library(factoextra)
+library(FactoMineR)
+library(kernlab)
+library(readxl)
+library(tidyr)
+
+# Read in data
+E9_Behavior_Data <- read_excel("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx", sheet = "DLS")
+
+# Run PCA and extract optimal number of PCs
+DLSzscore <- PCA(E9_Behavior_Data[,c(-1:-2)], graph = FALSE)
+
+# Define a function to extract optimal number of PCs
+get_optimal_pcs <- function(pca_obj) {
+  # Get the percentage of variance explained by each PC
+  var_prop <- pca_obj$eig / sum(pca_obj$eig)
+  
+  # Calculate cumulative proportion of variance explained
+  cum_var_prop <- cumsum(var_prop)
+  
+  # Find the number of PCs needed to explain 95% of the variance
+  num_pcs <- min(which(cum_var_prop >= 0.95))
+  
+  # Return the optimal number of PCs
+  return(num_pcs)
+}
+
+optimal_pcs <- get_optimal_pcs(DLSzscore)
+
+# Define color palette
+group_cols <- c("#1e3791","#00ac8c")
+
+plot_theme <- theme_minimal() +
+  theme(
+    plot.margin = unit(c(1, 1, 1, 1), "cm"),
+    legend.position = "top", # set legend to top
+    legend.justification = "right",
+    legend.margin = margin(t = 0, r = 0, b = 0, l = 0),
+    
+    panel.grid.minor = element_blank()
+  )
+
+# Perform k-means clustering on the PCA scores
+k <- 2  # number of clusters
+set.seed(123)  # for reproducibility
+kmeans_result <- kmeans(DLSzscore$ind$coord[,1:2], centers = k)
+
+pca_plot <- fviz_pca_ind(DLSzscore, 
+             label = "none", 
+             habillage = as.factor(E9_Behavior_Data$Group), 
+             palette = group_cols, 
+             addEllipses = TRUE, 
+             axes = c(1, 2), # only plot PC1 and PC2 on x and y axis
+             choose.var = optimal_pcs,
+             ggtheme = plot_theme) + # plot optimal number of PCs
+  ggtitle("PCA of Individuals")
+  
+# Create k-means clustering plot
+kmeans_plot <- fviz_cluster(list(data = DLSzscore$ind$coord[,1:2], cluster = kmeans_result$cluster),
+                         label = "none", # hide individual labels
+                         geom = "point",
+                         ellipse.type = "convex",
+                         palette = c("#00ac8c", "#1e3791"),
+                         main = paste("k-means clustering (k =", k, ")"),
+                         addlabels = FALSE,
+                         ggtheme = plot_theme) +
+  ggtitle("k-means clustering")
+
+# Add labels for the individual IDs
+pca_plot <- pca_plot + geom_text(aes(x = DLSzscore$ind$coord[,1], y = DLSzscore$ind$coord[,2], label = E9_Behavior_Data$ID), size = 2)
+
+# Biplot of PCA
+biplot <- fviz_pca_biplot(DLSzscore, repel = TRUE, ggtheme = plot_theme) +
+  ggtitle("Biplot of PCA")
+
+# Combine all plots using cowplot
+combined_plot <- plot_grid(pca_plot, plot_grid(kmeans_plot, biplot, ncol = 2, labels = c("B", "C"), label_size = 12, label_fontface = "bold"), labels = c("A"), label_size = 12, label_fontface = "bold", ncol = 1, rel_heights = c(1, 1))
+
+combined_plot
+
+# Save the plot
+ggsave("combined_plot.png", combined_plot, width = 12, height = 8, dpi = 300)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Load the required packages
+library(kernlab)
+library(factoextra)
+
+# Perform PCA on the data
+DLSzscore <- PCA(E9_Behavior_Data[,c(-1:-2)], graph = FALSE)
+
+# Compute the spectral clustering on the PCA scores
+k <- 2  # number of clusters
+set.seed(123)  # for reproducibility
+spectral_result <- as.factor(specc(DLSzscore$ind$coord[,1:2], centers=k, algorithm="normalized.cut"))
+
+# Create a scatterplot of the PCA scores, colored by cluster
+fviz_pca_ind(DLSzscore, 
+             habillage = spectral_result, 
+             palette = c("#1e3791", "#00ac8c"),
+             addEllipses = TRUE, 
+             legend.title = "Cluster",
+             ggtheme = theme_minimal()
+)
+
+
+
+
+# K-means clustering with ID labels
+# Load required libraries
+library(factoextra)  # for visualization of clustering results
+
+# Set the number of clusters
+k <- 2
+
+# Perform PCA on the data
+DLSzscore <- PCA(E9_Behavior_Data[,c(-1:-2)], graph = FALSE)
+
+# Set the seed for reproducibility
+set.seed(123)
+
+# Perform k-means clustering on the first two principal components
+kmeans_result <- kmeans(DLSzscore$ind$coord[,1:2], centers = k)
+
+# Create a scatter plot of the PCA scores with colored clusters
+pca_plot <- fviz_cluster(list(data = DLSzscore$ind$coord[,1:2], cluster = kmeans_result$cluster),
+                         geom = "point", pointsize = 2.5,
+                         ellipse.type = "convex", palette = c("#1e3791", "#00ac8c"),
+                         ggtheme = theme_minimal(), main = paste("k-means clustering (k =", k, ")"),
+                         xlab = paste("PC1 (", round(100 * PCA_var$eig[1]/sum(PCA_var$eig), 1), "%)"),
+                         ylab = paste("PC2 (", round(100 * PCA_var$eig[2]/sum(PCA_var$eig), 1), "%)"))
+
+# Add labels for the individual IDs
+pca_plot + geom_text(aes(x = DLSzscore$ind$coord[,1], y = DLSzscore$ind$coord[,2], label = E9_Behavior_Data$ID),
+                     size = 2, hjust = -0.1, vjust = 0.5)
+
+
+# Spectral clustering
+# Spectral clustering with ID labels
+library(factoextra)
+
+# Set the number of clusters
+k <- 2
+
+# Perform PCA on the data
+DLSzscore <- PCA(E9_Behavior_Data[,c(-1:-2)], graph = FALSE)
+
+# Compute the spectral clustering
+sc_result <- e1071::specc(DLSzscore$ind$coord[,1:2], centers = k, degree = 2)
+
+# Create a scatter plot of the PCA scores with colored clusters
+pca_plot <- fviz_cluster(list(data = DLSzscore$ind$coord[,1:2], cluster = sc_result),
+                         geom = "point", pointsize = 2.5,
+                         ellipse.type = "convex", palette = c("#1e3791", "#00ac8c"),
+                         ggtheme = theme_minimal(), main = paste("Spectral clustering (k =", k, ")"),
+                         xlab = paste("PC1 (", round(100 * DLSzscore$var$contrib[1], 1), "%)"),
+                         ylab = paste("PC2 (", round(100 * DLSzscore$var$contrib[2], 1), "%)"))
+
+# Add labels for the individual IDs
+pca_plot + geom_text(aes(x = DLSzscore$ind$coord[,1], y = DLSzscore$ind$coord[,2], label = E9_Behavior_Data$ID),
+                     size = 2, hjust = 1.2, vjust = 0.5)
+
+
+
+
+# DBSCAN clustering
+# Load required libraries
+library(factoextra)  # for visualization of clustering results
+library(fpc)  # for computing the silhouette score
+library(dbscan)  # for performing DBSCAN clustering
+library(cluster)
+
+# Set the parameters for DBSCAN clustering
+eps <- 0.9  # maximum distance between points in a cluster
+minPts <- 3  # minimum number of points required to form a dense region
+
+# Perform PCA on the data
+DLSzscore <- PCA(Behavior_Data[,c(-1:-2)], graph = FALSE)
+
+# Perform DBSCAN clustering on the first two principal components
+db_result <- dbscan(DLSzscore$ind$coord[,1:2], eps = eps, MinPts = minPts)
+
+# Compute the silhouette score to evaluate the clustering
+silhouette_score <- silhouette(DLSzscore$ind$coord[,1:2], db_result$cluster)$avg.width
+
+# Create a scatter plot of the PCA scores with colored clusters
+pca_plot <- fviz_cluster(list(data = DLSzscore$ind$coord[,1:2], cluster = db_result$cluster),
+                         geom = "point", pointsize = 2.5,
+                         ggtheme = theme_minimal(), main = paste("DBSCAN clustering (eps =", eps, ", minPts =", minPts, ")"),
+                         xlab = paste("PC1 (", round(100 * PCA_var$eig[1]/sum(PCA_var$eig), 1), "%)"),
+                         ylab = paste("PC2 (", round(100 * PCA_var$eig[2]/sum(PCA_var$eig), 1), "%)"))
+
+# Add labels for the individual IDs
+pca_plot + geom_text(aes(x = DLSzscore$ind$coord[,1], y = DLSzscore$ind$coord[,2], label = E9_Behavior_Data$ID),
+                     size = 2, hjust = -0.1, vjust = 0.5)
+
+
+E9_Behavior_Data <- read_excel("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx", sheet = "DLS")
+
+# Ensemble clustering
+# Load required libraries
+library(mclust)
+library(flexclust)
+library(cluster)
+library(ensembldb)
+library(factoextra)
+
+# Read in your data
+E9_Behavior_Data <- read_excel("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx", sheet = "DLS")
+
+# Exclude first two columns
+my_data <- E9_Behavior_Data[, -c(1:2)]
+
+# Normalize and scale the data
+my_data_norm <- scale(my_data)
+
+# Perform k-means clustering
+k_means <- kmeans(my_data_norm, centers = 3)
+
+# Perform hierarchical clustering
+hclust_result <- hclust(dist(my_data_norm), method = "ward.D2")
+
+# Perform model-based clustering using Mclust
+mclust_model <- Mclust(my_data_norm)
+
+# Create an ensemble of the three clustering results
+ensemble <- ensembldb(k_means, hclust_result, mclust_model)
+
+# Combine the individual clusterings into a single consensus clustering
+consensus <- consensusCluster(ensemble, method = "ward", consensus = "HC1")
+
+# Visualize the results
+fviz_cluster(list(data = my_data_norm, cluster = consensus$consensus), geom = "point")
+
+# Add cluster assignments to the original data
+E9_Behavior_Data$cluster <- consensus$consensus
+
+# Plot the clusters
+plot(Behavior_Data$PC1, Behavior_Data$PC2, 
+     col = E9_Behavior_Data$cluster, pch = 20, cex = 1.5, 
+     xlab = "PC1", ylab = "PC2", main = "Ensemble clustering of E9_Behavior_Data")
+
