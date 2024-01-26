@@ -11,10 +11,13 @@ Overall_data <- read_excel(file_path, sheet = sheet_name)
 
 
 # Select specific animals by ID and change their Group to "SUS"
-sus_animals <- c("0001", "0004", "750", "751", "755", "762", "764", "770", "771", "106", "111", "112", "113", "120", "134") # Replace with your specific animal IDs
+#sus_animals <- c("0001", "0004", "750", "751", "755", "762", "764", "770", "771", "106", "111", "112", "113", "120", "134") # Replace with your specific animal IDs
+
+# Define SUS animals (csv file)
+susAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/sus_animals.csv")))
 
 Overall_data <- Overall_data %>%
-  mutate(Group = if_else(ID %in% sus_animals, "SUS",
+  mutate(Group = if_else(ID %in% susAnimals, "SUS",
                          if_else(Group == "SIS", "RES", Group)))
 
 # Define group colors
@@ -236,12 +239,12 @@ for (variable in columns_to_plot) {
 all_test_results_df <- bind_rows(all_test_results)
 
 # Save the test results data frame to a CSV file
-write.csv(all_test_results_df, file = paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/test_results_", sheet_name, ".csv"), row.names = FALSE)
+write.csv(all_test_results_df, file = paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/test/statistics/test_results_", sheet_name, ".csv"), row.names = FALSE)
 
 # Save the post hoc results to a CSV file
 if (!is.null(all_posthoc_results) && length(all_posthoc_results) > 0) {
   all_posthoc_results_df <- bind_rows(all_posthoc_results)
-  write.csv(all_posthoc_results_df, file = paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/posthoc_results_", sheet_name, ".csv"), row.names = FALSE)
+  write.csv(all_posthoc_results_df, file = paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/test/statistics/posthoc_results_", sheet_name, ".csv"), row.names = FALSE)
 }
 
 # Save the plots for males and females separately
@@ -250,8 +253,8 @@ for (i in seq_along(all_plots)) {
   variable_name <- all_test_results[[i]]$Variable
   
   if (i %% 2 == 0) {
-    ggsave(filename = paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/female_", variable_name, ".svg"), plot = all_plots[[i]], width = 2.8, height = 3)
+    ggsave(filename = paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/test/statistics/female_", variable_name, ".svg"), plot = all_plots[[i]], width = 2.8, height = 3)
   } else {
-    ggsave(filename = paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/male_", variable_name, ".svg"), plot = all_plots[[i]], width = 2.8, height = 3)
+    ggsave(filename = paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/test/statistics/male_", variable_name, ".svg"), plot = all_plots[[i]], width = 2.8, height = 3)
   }
 }
