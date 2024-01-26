@@ -1,17 +1,26 @@
+
 # Load libraries
-library(ggplot2)
-library(dplyr)
-library(openxlsx)
-library(rstatix)
+neededLibraries <- c("ggplot2", "dplyr", "openxlsx", "rstatix")
+
+# Check if libraries are installed, if not, install them
+for (library_name in neededLibraries) {
+  if (!require(library_name)) {
+    install.packages(library_name)
+  }
+}
+
+# Load libraries
+for (library_name in neededLibraries) {
+  library(library_name)
+}
 
 # Read data
 file_path <- "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx"
 sheet_name <- "Overall"
 Overall_data <- read_excel(file_path, sheet = sheet_name)
 
-
 # Select specific animals by ID and change their Group to "SUS"
-#sus_animals <- c("0001", "0004", "750", "751", "755", "762", "764", "770", "771", "106", "111", "112", "113", "120", "134") # Replace with your specific animal IDs
+# sus_animals <- c("0001", "0004", "750", "751", "755", "762", "764", "770", "771", "106", "111", "112", "113", "120", "134") # Replace with your specific animal IDs
 
 # Define SUS animals (csv file)
 susAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/sus_animals.csv")))
