@@ -1,6 +1,6 @@
 
 # Install libraries if not already installed
-neededLibraries <- c("ggplot2", "dplyr", "openxlsx", "rstatix", "readxl", "svglite")
+neededLibraries <- c("ggplot2", "dplyr", "openxlsx", "rstatix", "readxl", "svglite", "ggpubr")
 
 for (library_name in neededLibraries) {
   if (!requireNamespace(library_name, quietly = TRUE)) {
@@ -66,7 +66,6 @@ for (library_name in neededLibraries) {
             axis.text.x = element_text(),
             axis.ticks.x = element_blank()
       )
-    
     return(p)
   }
 
@@ -126,26 +125,53 @@ for (library_name in neededLibraries) {
       
       # Check if there are enough observations in both groups
       if (sum(!is.na(data_group1)) >= 3 && sum(!is.na(data_group2)) >= 3) {
-        wilcox_res <- perform_wilcoxon_test(data_group1, data_group2)
+        con_norm <- shapiro.test(data_group1)
+        res_norm <- shapiro.test(data_group2)
         
-        # Check if the Wilcoxon test could be performed
-        if (!is.null(wilcox_res)) {
+        # Check if both groups are normally distributed
+        if (con_norm$p.value >= 0.05 && res_norm$p.value >= 0.05) {
+          # Perform t-test
+          t_res <- t.test(data_group1, data_group2)
+          
           # Store test results in a list
           test_results <- list(
             Variable = variable_name,
             Sex = sex,
-            Test = "Wilcoxon rank-sum test",
-            CON_Normality = NA,
-            RES_Normality = NA,
+            Test = "t-test",
+            CON_Normality = con_norm$p.value,
+            RES_Normality = res_norm$p.value,
             SUS_Normality = NA,
-            P_Value = wilcox_res$p.value,
-            Significance_Level = sprintf("%.3f", wilcox_res$p.value)
+            P_Value = t_res$p.value,
+            Significance_Level = sprintf("%.3f", t_res$p.value)
           )
           
           # Generate the plot
           p <- generate_plot(filtered_data, variable_name, sex)
           
           return(list(test_results = test_results, plot = p, posthoc_results = NULL))
+        } else {
+          # Perform Wilcoxon rank-sum test
+          wilcox_res <- perform_wilcoxon_test(data_group1, data_group2)
+          
+          # Check if the Wilcoxon test could be performed
+          if (!is.null(wilcox_res)) {
+            # Store test results in a list
+            test_results <- list(
+              Variable = variable_name,
+              Sex = sex,
+              Test = "Wilcoxon rank-sum test",
+              CON_Normality = con_norm$p.value,
+              RES_Normality = res_norm$p.value,
+              SUS_Normality = NA,
+              P_Value = wilcox_res$p.value,
+              Significance_Level = sprintf("%.3f", wilcox_res$p.value)
+            )
+            
+            # Generate the plot
+            p <- generate_plot(filtered_data, variable_name, sex)
+            
+            return(list(test_results = test_results, plot = p, posthoc_results = NULL))
+          }
         }
       }
     } else {
