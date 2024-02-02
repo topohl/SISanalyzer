@@ -4,12 +4,13 @@
 ## The function returns a list with the following elements:
 
 # Install required libraries
-neededLibraries <- c("readxl", "dplyr", "multcomp", "broom", "tidyr")
+neededLibraries <- c("readxl", "dplyr", "multcomp", "broom", "tidyr", "ggplot2", "ggpubr", "ggthemes", "ggExtra", "ggforce", "ggalluvial", "lattice", "latticeExtra", "cowplot", "ggrepel", "ggsci", "ggplot2", "cowplot")
 for (library_name in neededLibraries) {
     if (!requireNamespace(library_name, quietly = TRUE)) {
         install.packages(library_name)
     }
 }
+
 # Read data from Excel file
 file_path <- "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx"
 sheet_name <- "DLSdepressive"
@@ -20,6 +21,42 @@ susAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Str
 
 # Define the colors for the groups
 group_cols <- c("#1e3791", "#76A2E8", "#F79719")
+
+# create scatter plot of data
+generate_2wANOVA_plot <- function(data, col, group_cols) {
+    p <- ggplot(data, aes(x = Group, .data[[col]], color = Group, shape = Sex)) +
+    # Customize the axes and labels
+        scale_x_discrete(name = NULL, expand = c(0.3, 0.1)) + 
+        scale_y_continuous(expand = c(0.1, 0.1)) +
+        geom_jitter(aes(fill = Sex), size = 4, alpha = 0.7, position = position_dodge(width = 0.8)) +
+        stat_summary(
+            fun.min = function(z) {quantile(z, 0.25)},
+            fun.max = function(z) {quantile(z, 0.75)},
+            fun = median,
+            aes(group = Sex),
+            color = "black",
+            size = 0.8,
+            position = position_dodge(width = 0.8),
+            legend = FALSE
+        ) +
+        scale_color_manual(name = "Group", values = group_cols) +
+        scale_shape_manual(name = "Sex", values = c(16, 1)) +
+        labs(title = bquote(~bold(.(col))),
+                 caption = "",
+                 x = NULL,
+                 y = "z score [a.u.]") +
+        # Customize the plot theme
+        theme_minimal_hgrid(12, rel_small = 1) +
+        theme(plot.title = element_text(hjust = 0.5, face = "plain"),
+            plot.subtitle = element_text(hjust = 0.5, size = 10, face = "plain"),
+            legend.position = "none",
+            legend.title = element_blank(),  # Remove the legend title
+            axis.title.x = element_blank(),
+            axis.text.x = element_text(),
+            axis.ticks.x = element_blank()
+        )
+    return(p)
+}
 
 # Update the Group column based on the ID and susAnimals
 data <- data %>%
@@ -123,7 +160,12 @@ for (col in cols) {
   
   # Append the row to the data frame
   anova.result <- rbind(anova.result, row)
-
+  
+  # Generate plot
+  p <- generate_2wANOVA_plot(data, col, group_cols)
+  
+  # Save plot as PNG
+  ggsave(filename = paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/DLS_new/2wayAnova/plot_", col, ".svg"), plot = p, width = 3, height = 3)
 }
 
 # Print the first few rows of the data frame
@@ -168,9 +210,9 @@ for (col in cols) {
 # Combine all post hoc results into a single dataframe
 posthoc.result <- do.call(rbind, posthoc_results)
 
-
-
-
 # Print the first few rows of the post hoc results dataframe
 head(posthoc.result)
 
+# Save the results to a CSV file
+write.csv(anova.result, file = "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/DLS_new/2wayAnova/2wANOVA_results.csv", row.names = FALSE)
+write.csv(posthoc.result, file = "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/DLS_new/2wayAnova/posthoc_results.csv", row.names = FALSE)
