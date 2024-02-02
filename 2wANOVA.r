@@ -42,7 +42,7 @@ generate_2wANOVA_plot <- function(data, col, group_cols) {
         scale_color_manual(name = "Group", values = group_cols) +
         scale_shape_manual(name = "Sex", values = c(16, 1)) +
         labs(title = bquote(~bold(.(col))),
-                 caption = "",
+                 caption = paste0("Main effect of group = ", format(round(f.group, 3), nsmall = 3), ", p = ", ifelse(round(p.group, 3) == 0.01, ".01", format(round(p.group, 3), nsmall = 3)), "\nMain effect of sex = ", format(round(f.sex, 3), nsmall = 3), ", p = ", ifelse(round(p.sex, 3) == 0.01, ".01", format(round(p.sex, 3), nsmall = 3)), "\nInteraction = ", format(round(f.interaction, 3), nsmall = 3), ", p = ", ifelse(round(p.interaction, 3) == 0.01, ".01", format(round(p.interaction, 3), nsmall = 3))),
                  x = NULL,
                  y = "z score [a.u.]") +
         # Customize the plot theme
@@ -165,7 +165,7 @@ for (col in cols) {
   p <- generate_2wANOVA_plot(data, col, group_cols)
   
   # Save plot as PNG
-  ggsave(filename = paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/DLS_new/2wayAnova/plot_", col, ".svg"), plot = p, width = 3, height = 3)
+  ggsave(filename = paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/DLS_new/2wayAnova/plot_", col, ".svg"), plot = p, width = 3, height = 3.5)
 }
 
 # Print the first few rows of the data frame
@@ -186,29 +186,39 @@ posthoc_results <- list()
 
 # Loop over the columns to analyze
 for (col in cols) {
-  # Perform two-way ANOVA for each column
-  aov.result <- aov(data[[col]] ~ Group * Sex, data = data)
+    # Perform two-way ANOVA for each column
+    aov.result <- aov(data[[col]] ~ Group * Sex, data = data)
 
-  # Perform Tukey's HSD test for post hoc analysis
-  posthoc <- TukeyHSD(aov.result)
-  
-  
-  # Loop over the variables
-  for (variable in names(posthoc)) {
-    # Extract post hoc results for the variable
-    posthoc_df <- as.data.frame(posthoc[[variable]])
+    # Perform Tukey's HSD test for post hoc analysis
+    posthoc <- TukeyHSD(aov.result)
+        
+    # Loop over the variables
+    for (variable in names(posthoc)) {
+        # Extract post hoc results for the variable
+        posthoc_df <- as.data.frame(posthoc[[variable]])
 
-    # Add variable name and compared column info to the dataframe
-    posthoc_df$variable <- variable
-    posthoc_df$compared_columns <- col
+        # Add variable name and compared column info to the dataframe
+        posthoc_df$variable <- variable
+        posthoc_df$compared_columns <- col
+        posthoc_df$Comparison <- rownames(posthoc_df)  # Add the "Comparison" column
 
-    # Store the results in the list
-    posthoc_results[[length(posthoc_results) + 1]] <- posthoc_df
-  }
+        # Store the results in the list
+        posthoc_results[[length(posthoc_results) + 1]] <- posthoc_df
+    }
 }
 
 # Combine all post hoc results into a single dataframe
 posthoc.result <- do.call(rbind, posthoc_results)
+
+# Reorder the columns
+posthoc.result <- posthoc.result %>%
+    select(compared_columns, variable, Comparison, diff, lwr, upr, `p adj`)
+
+# add p adj.sign column
+posthoc.result$p.adj.sign <- ifelse(posthoc.result$`p adj` < 0.0001, "****",
+                      ifelse(posthoc.result$`p adj` < 0.001, "***",
+                          ifelse(posthoc.result$`p adj` < 0.01, "**", 
+                            ifelse(posthoc.result$`p adj` < 0.05, "*", "ns"))))
 
 # Print the first few rows of the post hoc results dataframe
 head(posthoc.result)
