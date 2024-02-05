@@ -8,13 +8,25 @@ neededLibraries <- c("readxl", "dplyr", "multcomp", "broom", "tidyr", "ggplot2",
 for (library_name in neededLibraries) {
     if (!requireNamespace(library_name, quietly = TRUE)) {
         install.packages(library_name)
+    } else {
+        library(library_name, character.only = TRUE)
     }
 }
 
 # Read data from Excel file
 file_path <- "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx"
-sheet_name <- "DLSdepressive"
+sheet_name <- "zscore3"
 data <- read_excel(file_path, sheet = sheet_name)
+
+# Define output directories and file names
+result_dir <- "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/zscore3/twoWayAnova/"
+anova_result_file <- "2wANOVA_results.csv"
+posthoc_result_file <- "posthoc_results.csv"
+
+# Check if the result directory exists, if not, create it
+if (!file.exists(result_dir)) {
+  dir.create(result_dir, recursive = TRUE)
+}
 
 # Define SUS animals (csv file)
 susAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/sus_animals.csv")))
@@ -165,7 +177,8 @@ for (col in cols) {
   p <- generate_2wANOVA_plot(data, col, group_cols)
   
   # Save plot as PNG
-  ggsave(filename = paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/DLS_new/2wayAnova/plot_", col, ".svg"), plot = p, width = 3, height = 3.5)
+  ggsave(filename = paste0(result_dir, "plot_", col, ".svg"), plot = p, width = 3, height = 3.5)
+  }
 }
 
 # Print the first few rows of the data frame
@@ -223,6 +236,6 @@ posthoc.result$p.adj.sign <- ifelse(posthoc.result$`p adj` < 0.0001, "****",
 # Print the first few rows of the post hoc results dataframe
 head(posthoc.result)
 
-# Save the results to a CSV file
-write.csv(anova.result, file = "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/DLS_new/2wayAnova/2wANOVA_results.csv", row.names = FALSE)
-write.csv(posthoc.result, file = "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/statistics/DLS_new/2wayAnova/posthoc_results.csv", row.names = FALSE)
+# Write the results to CSV files
+write.csv(anova.result, file = file.path(result_dir, anova_result_file), row.names = FALSE)
+write.csv(posthoc.result, file = file.path(result_dir, posthoc_result_file), row.names = FALSE)
