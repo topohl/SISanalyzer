@@ -102,6 +102,9 @@ perform_posthoc_anova <- function(data, variable_name) {
 
   # Add a column specifying the group comparison
   pairwise_results$Group_Comparison <- paste(pairwise_results$group1, "vs.", pairwise_results$group2)
+
+  # Add column indicating the type of multiple comparison correction
+  pairwise_results$Correction <- "Bonferroni"
   return(pairwise_results)
 }
 
@@ -116,6 +119,8 @@ perform_posthoc_kruskal <- function(data, variable_name) {
   
   # Add a column specifying the group comparison
   pairwise_results$Group_Comparison <- paste(pairwise_results$group1, "vs.", pairwise_results$group2)
+  # Add column indicating the type of multiple comparison correction
+  pairwise_results$Correction <- "Holm"
   return(pairwise_results)
 }
 
