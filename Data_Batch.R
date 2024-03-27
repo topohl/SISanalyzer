@@ -4,13 +4,13 @@
 # and applies customizations to the plots.
 
 # Install libraries if not already installed
-requiredPackages <- c("ggplot2", "dplyr", "openxlsx", "rstatix", "readxl", "svglite", "ggpubr", "cowplot")
+requiredPackages <- c("scales", "ggplot2", "dplyr", "openxlsx", "rstatix", "readxl", "svglite", "ggpubr", "cowplot", "reshape2", "ggradar", "devtools", "fmsb")
 
 for (package in requiredPackages) {
   if (!requireNamespace(package, quietly = TRUE)) {
     install.packages(package, dependencies = TRUE)
   } else {
-        library(package, character.only = TRUE)
+    library(package, character.only = TRUE)
   }
 }
   
@@ -78,6 +78,58 @@ p <- ggplot(filtered_data, aes(Group, .data[[variable_name]], color = Group)) +
           axis.ticks.x = element_blank())
 return(p)
 }
+
+# Function to create radar chart
+create_radar_chart <- function(data, sex, result_dir) {
+  # Coerce tibble to dataframe
+  data <- as.data.frame(data)
+    
+  # Filter data for the specified sex
+  sex_data <- data[data$Sex == sex, ]
+  # print sex_data head
+  head(sex_data)
+
+  # Extract variables to plot (excluding ID, Group, and Sex)
+  variables <- setdiff(names(sex_data), c("ID", "Group", "Sex", "Batch"))
+  
+  # Calculate mean values for each group, including NA values
+  group_means <- aggregate(sex_data[, variables], by = list(Group = sex_data$Group), FUN = function(x) mean(x, na.rm = TRUE))
+  rownames(group_means) <- group_means$Group
+  group_means <- group_means[, -1]  # Remove the "Group" column
+
+  # calculate meadian values for each group, including NA values
+  group_medians <- aggregate(sex_data[, variables], by = list(Group = sex_data$Group), FUN = function(x) median(x, na.rm = TRUE))
+  rownames(group_medians) <- group_medians$Group
+  group_medians <- group_medians[, -1]  # Remove the "Group" column
+  
+  # Identify Max and Min for each variable and create dataframe
+  max_min <- data.frame(matrix(nrow = 2, ncol = length(variables)))
+  colnames(max_min) <- variables
+  rownames(max_min) <- c("Max", "Min")
+
+  for (i in 1:length(variables)) {
+    max_min[1, i] <- max(sex_data[, variables[i]], na.rm = TRUE)
+    max_min[2, i] <- min(sex_data[, variables[i]], na.rm = TRUE)
+  }
+  
+  # bind max and min to dataframe
+  group_medians <- rbind(max_min, group_medians)
+
+  # Create radar chart
+  radarchart(group_medians, 
+             pcol = group_cols, pfcol = scales::alpha(group_cols, 0.5),
+             plwd = 2, plty = 1, cglcol = "grey", cglty = 1, cglwd = 0.8,
+             axistype = 1, title = paste("Radar Chart for", sex))
+  
+  # Save radar chart
+  filename <- paste0(result_dir, sex, "_radar_chart.svg")
+  print(filename)  # Debugging: Print filename to check if it's correct
+  dev.copy(svg, filename)
+  dev.off()
+}
+
+# Create radar chart for males and females and save as SVG
+create_radar_chart(data, c("m", "f"), result_dir)
 
 # Function to perform Wilcoxon rank-sum test
 perform_wilcoxon_test <- function(data_group1, data_group2) {
