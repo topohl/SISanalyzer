@@ -4,13 +4,14 @@
 ## The function returns a list with the following elements:
 
 # Install required libraries
-neededLibraries <- c("readxl", "dplyr", "multcomp", "broom", "tidyr", "ggplot2", "ggpubr", "ggthemes", "ggExtra", "ggforce", "ggalluvial", "lattice", "latticeExtra", "cowplot", "ggrepel", "ggsci", "ggplot2", "cowplot")
-for (library_name in neededLibraries) {
-    if (!requireNamespace(library_name, quietly = TRUE)) {
-        install.packages(library_name)
-    } else {
-        library(library_name, character.only = TRUE)
-    }
+requiredPackages <- c("readxl", "dplyr", "multcomp", "broom", "tidyr", "ggplot2", "ggpubr", "ggthemes", "ggExtra", "ggforce", "ggalluvial", "lattice", "latticeExtra", "cowplot", "ggrepel", "ggsci", "ggplot2", "cowplot")
+
+for (package in requiredPackages) {
+  if (!requireNamespace(package, quietly = TRUE)) {
+    install.packages(package, dependencies = TRUE)
+  } else {
+        library(package, character.only = TRUE)
+  }
 }
 
 # Read data from Excel file
@@ -49,8 +50,7 @@ generate_2wANOVA_plot <- function(data, col, group_cols) {
             color = "black",
             size = 0.8,
             position = position_dodge(width = 0.8),
-            legend = FALSE
-        ) +
+            legend = FALSE) +
         scale_color_manual(name = "Group", values = group_cols) +
         scale_shape_manual(name = "Sex", values = c(16, 1)) +
         labs(title = bquote(~bold(.(col))),
@@ -62,7 +62,7 @@ generate_2wANOVA_plot <- function(data, col, group_cols) {
         theme(plot.title = element_text(hjust = 0.5, face = "plain"),
             plot.subtitle = element_text(hjust = 0.5, size = 10, face = "plain"),
             legend.position = "none",
-            legend.title = element_blank(),  # Remove the legend title
+            legend.title = element_blank(),
             axis.title.x = element_blank(),
             axis.text.x = element_text(),
             axis.ticks.x = element_blank()
@@ -178,7 +178,6 @@ for (col in cols) {
   
   # Save plot as PNG
   ggsave(filename = paste0(result_dir, "plot_", col, ".svg"), plot = p, width = 3, height = 3.5)
-  }
 }
 
 # Print the first few rows of the data frame
