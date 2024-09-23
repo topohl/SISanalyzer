@@ -26,7 +26,7 @@ library(lda)
 # define output folder
 results_dir <- "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/PCA/pcaFollowedByCluster/"
 # Read in data
-sheet_name <- "DLSsingleSlim"
+sheet_name <- "overallZ"
 data <- read_excel("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx", sheet = sheet_name)
 susAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/sus_animals.csv")))
 conAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/con_animals.csv")))
@@ -204,8 +204,6 @@ ggsave(file.path(results_dir, "cluster_plot.svg"), cluster_plot)
 
 # Biplot of PCA
 fviz_pca_biplot(pca_data, repel = TRUE)
-
-
 
 fviz_nbclust(pca_data$ind$coord, kmeans, method = 'wss')
 
