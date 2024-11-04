@@ -16,13 +16,15 @@ for (package in requiredPackages) {
   
 # Define group colors
 group_cols <- c("#1e3791", "#76A2E8", "#F79719")
+#group_cols <- c("#919c4c", "#c03728", "#fd8f24")
+#group_cols <- c("#2b323f", "#c03728", "#fd8f24")
 
 # Factors to be used in the ANOVA or pairwise tests
 factors <- c("Group")
 
 # Read data from Excel file
 file_path <- "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx"
-sheet_name <- "DLSsingle"
+sheet_name <- "DLSsingleSlim"
 data <- read_excel(file_path, sheet = sheet_name)
 
 # Define the result directory
@@ -34,49 +36,64 @@ if (!dir.exists(result_dir)) {
 }
 
 # Define SUS animals (csv file)
-susAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/sus_animals.csv")))
+susAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/sus_animals_batchCorrected.csv")))
 
 # Update the Group column based on the ID and susAnimals
 data <- data %>%
   mutate(Group = if_else(ID %in% susAnimals, "SUS",
                         if_else(Group == "SIS", "RES", Group)))
 
+# Function to calculate global min and max for a variable across both sexes
+calculate_y_limits <- function(data, variable_name) {
+  global_min <- min(data[[variable_name]], na.rm = TRUE)
+  global_max <- max(data[[variable_name]], na.rm = TRUE)
+  
+  return(c(global_min, global_max))
+}
+
 # Function to generate plots for each variable and sex
-generate_plot <- function(data, variable_name, sex) {
+generate_plot <- function(data, variable_name, sex, y_limits) {
   filtered_data <- data %>%
     filter(Sex == sex)
     
 # Create the plot using ggplot
-p <- ggplot(filtered_data, aes(Group, .data[[variable_name]], color = Group)) +
+  p <- ggplot(filtered_data, aes(Group, .data[[variable_name]], color = Group)) +
     # Customize the axes and labels
     scale_x_discrete(name = NULL, expand = c(0.3, 0.1)) + 
-    scale_y_continuous(expand = c(0.1, 0.1)) +
+    scale_y_continuous(limits = y_limits, expand = c(0.1, 0.1)) +  # Set y-axis limits
     # Add jittered points and summary statistics
-    geom_jitter(aes(fill = Group), size = 4, alpha = 0.7, width = 0.2, shape = 16) +
+    geom_jitter(aes(fill = Group), size = 7, alpha = 0.7, width = 0.2, shape = 16) +
     stat_summary(
-      fun.min = function(z) {quantile(z, 0.25)},
-      fun.max = function(z) {quantile(z, 0.75)},
+      fun.min = function(z) { quantile(z, 0.25) },
+      fun.max = function(z) { quantile(z, 0.75) },
       fun = median,
       color = "black",
-      size = 0.8,
+      size = 1,
       shape = 16,
-      width = 1) +  # Set the width of the quantile line to 0.5
+      width = 5) +  # Set the width of the quantile line to 0.5
     # Customize the plot labels and colors
     labs(title = bquote(~bold(.(variable_name))),
-        subtitle = paste("(", sex, ")", sep = ""),
-        x = NULL,
-        y = "z score [a.u.]") +
+         subtitle = paste("(", sex, ")", sep = ""),
+         x = NULL,
+         y = "z score [a.u.]") +
     scale_color_manual(name = NULL, values = group_cols) +
     scale_fill_manual(name = NULL, values = group_cols) +
     # Customize the plot theme
     theme_minimal_hgrid(12, rel_small = 1) +
-    theme(plot.title = element_text(hjust = 0.5, face = "plain"),
-          plot.subtitle = element_text(hjust = 0.5, size = 10, face = "plain"),
-          legend.position = "none",
-          axis.title.x = element_blank(),
-          axis.text.x = element_text(),
-          axis.ticks.x = element_blank())
-return(p)
+    theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5, face = "plain"),
+        plot.subtitle = element_text(hjust = 0.5, size = 15, face = "plain"),
+        legend.position = "none",
+        axis.line = element_line(color = "black"),
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(size = 16),  # Increase x-axis text size
+        axis.ticks.x = element_blank(),
+        panel.background = element_blank(),
+        axis.text.y = element_text(size = 16),  # Increase y-axis text size
+        axis.title.y = element_text(size = 16)
+    )
+  
+  return(p)
 }
 
 # Function to create radar chart
@@ -130,6 +147,8 @@ create_radar_chart <- function(data, sex, result_dir) {
 
 # Create radar chart for males and females and save as SVG
 create_radar_chart(data, c("m", "f"), result_dir)
+create_radar_chart(data, "m", result_dir)  # For males
+create_radar_chart(data, "f", result_dir)  # For females
 
 # Function to perform Wilcoxon rank-sum test
 perform_wilcoxon_test <- function(data_group1, data_group2) {
@@ -156,9 +175,29 @@ perform_posthoc_anova <- function(data, variable_name) {
   pairwise_results$Group_Comparison <- paste(pairwise_results$group1, "vs.", pairwise_results$group2)
 
   # Add column indicating the type of multiple comparison correction
-  pairwise_results$Correction <- "Bonferroni"
+  pairwise_results$Correction <- "bonferroni"
   return(pairwise_results)
 }
+
+# Function to perform post hoc pairwise tests for ANOVA using Games-Howell correction
+#perform_posthoc_anova <- function(data, variable_name) {
+#  # Perform ANOVA
+#  anova_test <- aov(as.formula(paste(variable_name, "~ Group")), data = data)
+#
+#  # Perform effect size calculation
+#  eta_squared <- eta_squared(anova_test)
+#  
+#  # Perform pairwise comparisons using Games-Howell correction
+#  pairwise_results <- games_howell_test(data, formula = as.formula(paste(variable_name, "~ Group")))
+#
+#  # Add a column specifying the group comparison
+#  pairwise_results$Group_Comparison <- paste(pairwise_results$group1, "vs.", pairwise_results$group2)
+#
+#  # Add column indicating the type of multiple comparison correction
+#  pairwise_results$Correction <- "Games-Howell"
+#  return(pairwise_results)
+#}
+
 
 # Function to perform post hoc pairwise tests for Kruskal-Wallis
 perform_posthoc_kruskal <- function(data, variable_name) {
@@ -176,8 +215,12 @@ perform_posthoc_kruskal <- function(data, variable_name) {
   return(pairwise_results)
 }
 
+
 # Function to perform normality test and appropriate test (ANOVA/Kruskal-Wallis or t-test/Wilcoxon rank-sum test) for each variable and sex
 test_and_plot_variable <- function(data, variable_name, sex) {
+  # Calculate global y limits across both sexes
+  y_limits <- calculate_y_limits(data, variable_name)
+
   filtered_data <- data %>%
     filter(Sex == sex)
   
@@ -215,8 +258,8 @@ test_and_plot_variable <- function(data, variable_name, sex) {
           Significance_Level = sprintf("%.3f", t_res$p.value)
         )
 
-        # Generate the plot
-        p <- generate_plot(filtered_data, variable_name, sex)
+        # Generate the plot with the y_limits
+        p <- generate_plot(filtered_data, variable_name, sex, y_limits)
         
         return(list(test_results = test_results, plot = p, posthoc_results = NULL))
       } else {
@@ -237,8 +280,8 @@ test_and_plot_variable <- function(data, variable_name, sex) {
             Significance_Level = sprintf("%.3f", wilcox_res$p.value)
           )
             
-          # Generate the plot
-          p <- generate_plot(filtered_data, variable_name, sex)
+          # Generate the plot with the y_limits
+          p <- generate_plot(filtered_data, variable_name, sex, y_limits)
           
           return(list(test_results = test_results, plot = p, posthoc_results = NULL))
         }
@@ -320,12 +363,13 @@ test_and_plot_variable <- function(data, variable_name, sex) {
       }
     }
     
-    # Generate the plot
-    p <- generate_plot(filtered_data, variable_name, sex)
+    # Generate the plot with the y_limits
+    p <- generate_plot(filtered_data, variable_name, sex, y_limits)
       
     return(list(test_results = test_results, plot = p, posthoc_results = test_results_df))
   }
 }
+
 
 # Get the list of columns to plot (excluding "ID", "Group", and "Sex")
 columns_to_plot <- setdiff(names(data), c("ID", "Group", "Sex", "Batch"))
@@ -360,12 +404,12 @@ all_plots <- list()
   all_test_results_df <- bind_rows(all_test_results)
 
   # Save the test results data frame to a CSV file
-  write.csv(all_test_results_df, file = paste0(result_dir, "test_results_", sheet_name, ".csv"), row.names = FALSE)
+  write.xlsx(all_test_results_df, file = paste0(result_dir, "test_results_", sheet_name, ".xlsx"), row.names = FALSE)
 
   # Save the post hoc results to a CSV file
   if (!is.null(all_posthoc_results) && length(all_posthoc_results) > 0) {
     all_posthoc_results_df <- bind_rows(all_posthoc_results)
-    write.csv(all_posthoc_results_df, file = paste0(result_dir, "posthoc_results_", sheet_name, ".csv"), row.names = FALSE)
+    write.xlsx(all_posthoc_results_df, file = paste0(result_dir, "posthoc_results_", sheet_name, ".xlsx"), row.names = FALSE)
   }
 
   # Save the plots for males and females separately
@@ -379,3 +423,5 @@ all_plots <- list()
       ggsave(filename = paste0(result_dir, "male_", variable_name, ".svg"), plot = all_plots[[i]], width = 2.8, height = 3)
     }
   }
+
+  warnings()
