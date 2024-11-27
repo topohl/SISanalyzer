@@ -46,7 +46,7 @@ factors <- c("Cluster")
 
 # Read data from Excel file
 file_path <- "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx"
-sheet_name <- "DLSsingle"
+sheet_name <- "OverallZ"
 data <- read_excel(file_path, sheet = sheet_name)
 
 # Define the result directory
@@ -60,8 +60,8 @@ if (!dir.exists(result_dir)) {
 # Define SUS animals (csv file)
 susAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/sus_animals.csv")))
 
-# Define cluster animals and get information of ID and cluster (csv file) -- only activate if using clusters to analyze
-clusterAnimals <- read.csv("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/clustering_results.csv", header = TRUE, stringsAsFactors = FALSE)
+# Define cluster animals and get information of ID and cluster (csv file), selected Excel sheet name included in file output -- only activate if using clusters to analyze
+clusterAnimals <- read.csv("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/", sheet_name, "clustering_results.csv", header = TRUE, stringsAsFactors = FALSE)
 
 # add new row to data with cluster iformation of each ID
 data <- merge(data, clusterAnimals[, c("ID", "Cluster")], by = "ID", all.x = TRUE)
