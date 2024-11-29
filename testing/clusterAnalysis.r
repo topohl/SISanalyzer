@@ -137,8 +137,8 @@ variance_explained <- pca_result$eig[, 2]  # Extract the percentage of variance 
     geom_point(aes(stroke = ifelse(Sex_Group %in% c("f.RES", "f.SUS", "f.CON"), 2, 1),  # Thicker outlines for female groups
                    size = ifelse(Sex_Group %in% c("m.RES", "m.SUS", "m.CON"), 4, 3))) +  # Bigger size for male groups
     labs(title = ifelse(sex_as_factor, paste("PCA Visualization with Clusters for sex", sex), "PCA Visualization with Clusters for all sexes combined"),
-         x = paste0("Principal Component 1 (", round(variance_explained[1], 1), "%)"),  # Add variance explained to x-axis
-         y = paste0("Principal Component 2 (", round(variance_explained[2], 1), "%)"),  # Add variance explained to y-axis
+         x = paste0("PC1 (", round(variance_explained[1], 1), "%)"),  # Add variance explained to x-axis
+         y = paste0("PC2 (", round(variance_explained[2], 1), "%)"),  # Add variance explained to y-axis
          shape = "Sex & Group") +
     theme_minimal() +
     scale_color_manual(values = c("#FF7E47", "#8ACE00", "#FFBB49", "#6BCAEB")) +  # Set cluster colors
