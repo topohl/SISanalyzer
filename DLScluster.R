@@ -1,5 +1,5 @@
 # Install necessary packages
-required_packages <- c("ggplot2", "cowplot", "colorspace", "dplyr", "factoextra", "FactoMineR", "kernlab", "readxl", "tidyr", "GGally", "topicmodels", "missMDA", "lda", "MASS", "broom", "missForest", "readxl")
+required_packages <- c("ggplot2", "cowplot", "colorspace", "dplyr", "factoextra", "FactoMineR", "kernlab", "readxl", "tidyr", "GGally", "topicmodels", "missMDA", "lda", "MASS", "broom", "missForest", "readxl", "corrplot")
 
 for (package in required_packages) {
   if (!requireNamespace(package, quietly = TRUE)) {
@@ -23,10 +23,15 @@ library(topicmodels)
 library(missMDA)
 library(lda)
 
-# define output folder
-results_dir <- "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/PCA/pcaFollowedByCluster/"
 # Read in data
-sheet_name <- "overallZ"
+sheet_name <- "overallRawReduced"
+
+# define output folder
+results_dir <- file.path("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/PCA/pcaFollowedByCluster", sheet_name)
+if (!dir.exists(results_dir)) {
+  dir.create(results_dir, recursive = TRUE)
+}
+
 data <- read_excel("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx", sheet = sheet_name)
 susAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/sus_animals.csv")))
 conAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/con_animals.csv")))
@@ -38,33 +43,77 @@ data$Group <- ifelse(data$Group == "SIS" & data$ID %in% susAnimals, "SUS", ifels
 get_optimal_pcs <- function(pca_obj) {
   # Get the percentage of variance explained by each PC
   var_prop <- pca_obj$eig / sum(pca_obj$eig)
-  
+
   # Calculate cumulative proportion of variance explained
   cum_var_prop <- cumsum(var_prop)
-  
+
   # Find the number of PCs needed to explain 95% of the variance
   num_pcs <- min(which(cum_var_prop >= 0.95))
-  
+
   # Return the optimal number of PCs
   return(num_pcs)
 }
 
+# transform data to numeric apart from columns 1-4
+data[, -c(1:4)] <- lapply(data[, -c(1:4)], function(x) as.numeric(as.character(x)))
+
 # Run PCA and extract optimal number of PCs for all data
-pca_data <- PCA(data[, -c(1:4, which(names(data) == "CombZ"))], graph = FALSE)
+pca_data <- PCA(data[, -c(1:4)], graph = FALSE)
 optimal_pcs <- get_optimal_pcs(pca_data)
 
-# Define color palette
-group_cols <- c("#1e3791","#00ac8c","#F79719","#1e3791","#00ac8c","#F79719")
+var <- get_pca_var(pca_data)
 
-# Plot PCA with optimal number of PCs for all data
-pca_plot <- fviz_pca_ind(pca_data, 
-             label = "none", 
-             habillage = interaction(data$Group, data$Sex), 
-             palette = group_cols, 
-             addEllipses = TRUE, 
-             axes = c(1, 2), # only plot PC1 and PC2 on x and y axis
-             choose.var = optimal_pcs # plot optimal number of PCs
-)
+# Define color palette
+group_cols <- c("#1e3791", "#00ac8c", "#F79719", "#1e3791", "#00ac8c", "#F79719")
+
+# Define shape mapping based on Group and Sex:
+# female CON: full circle (16)
+# male CON: open circle (1)
+# female SUS: full triangle (17)
+# male SUS: open triangle (2)
+# female RES: full square (15)
+# male RES: open square (0)
+shape_mapping <- c("CON.f" = 16, "CON.m" = 1, "SUS.f" = 17, "SUS.m" = 2, "RES.f" = 15, "RES.m" = 0)
+
+# Plot PCA with optimal number of PCs for all data - Clean, modern, and publication-ready
+pca_plot <- fviz_pca_ind(pca_data,
+  label = "none",
+  habillage = interaction(data$Group, data$Sex),
+  palette = group_cols,
+  addEllipses = TRUE,
+  ellipse.args = list(
+    linetype = "blank",  # no outer line
+    size = 0,            # no line width
+    alpha = 0.4
+  ),
+  axes = c(1, 2),  # only plot PC1 and PC2 on x and y axis
+  choose.var = optimal_pcs,  # plot optimal number of PCs
+  pointsize = 2,  # increased symbol size
+  ggtheme = theme_classic(base_size = 16) +
+            theme(
+              plot.title = element_text(face = "bold", hjust = 0.5),
+              axis.title = element_text(face = "bold"),
+              legend.position = "top",
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              axis.text = element_text(color = "black")
+            )
+) +
+  ggtitle("PCA of All Data") +
+  scale_shape_manual(values = shape_mapping) +
+  coord_equal() +
+  theme(aspect.ratio = 1)
+
+# make and display corrplot 
+corrplot(var$cos2, is.corr = FALSE,
+     method = "color",
+     col = colorRampPalette(c("white", "blue", "darkblue"))(200),
+     addCoef.col = "black",
+     number.cex = 0.7,
+     tl.cex = 0.8,
+     cl.align = "l",
+     title = "Variable Cos2",
+     mar = c(0, 0, 1, 0))
 
 # Save the PCA plot for all data
 ggsave(file.path(results_dir, paste0("pca_plot_", sheet_name, ".svg")), pca_plot, dpi = 300, height = 5, width = 6)
@@ -117,33 +166,52 @@ for (sex in unique(data$Sex)) {
   sex_pca_data <- PCA(sex_data[, -c(1:4, which(names(sex_data) == "CombZ"))], graph = FALSE)
   
   for (i in 1:5) {
-    var_contrib <- fviz_contrib(sex_pca_data, choice = "var", axes = i, top = 10)
-    
-    # Modify the plot appearance 
-    var_contrib <- var_contrib +
-      theme_minimal() +
+    var_contrib <- fviz_contrib(sex_pca_data, choice = "var", axes = i, top = 10) +
+      theme_minimal(base_family = "Helvetica") +
       theme(
-        plot.title = element_text(size = 14, face = "bold"),
-        axis.title.x = element_blank(),  # Hide x-axis title
-        axis.title.y = element_text(size = 12),
-        axis.text = element_text(size = 10, face = "bold"),
-        legend.title = element_blank(),
-        legend.text = element_text(size = 10),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
+        plot.title = element_text(size = 16, face = "bold", hjust = 0.5, color = "#2D2D2D"),
+        axis.title.x = element_text(size = 14, color = "#2D2D2D"),
+        axis.title.y = element_text(size = 14, color = "#2D2D2D"),
+        axis.text.x = element_text(size = 12, color = "#2D2D2D", angle = 45, hjust = 1),
+        axis.text.y = element_text(size = 12, color = "#2D2D2D"),
+        legend.title = element_text(size = 12, face = "bold", color = "#2D2D2D"),
+        legend.text = element_text(size = 12, color = "#2D2D2D"),
         panel.border = element_blank(),
-        panel.background = element_blank(),
-        plot.background = element_blank(),
-        plot.margin = margin(1, 1, 1, 1, "cm")
-      )
-    
+        plot.background = element_rect(fill = "transparent", color = NA),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()
+      ) +
+      labs(
+        title = paste("Variable Contribution - PC", i, "for sex", sex),
+        x = "Variable",
+        y = "Contribution (%)"
+      ) +
+      scale_fill_manual(values = c("#1e3791", "#00ac8c", "#F79719")) +
+      scale_color_manual(values = c("#1e3791", "#00ac8c", "#F79719"))
+
     # Save the variable contribution plot
-    ggsave(file.path(results_dir, paste0("var_contrib_", data$sheet_name, "_", sex, "_", i, ".svg")), var_contrib, dpi = 300, height = 5, width = 6)
+    ggsave(
+      file.path(results_dir, paste0("var_contrib_", sheet_name, "_", sex, "_", i, ".svg")),
+      var_contrib, dpi = 300, height = 5, width = 6
+    )
   }
 }
 
 # Plot the PCA plot
 print(pca_plot)
+
+# create biplot of pca_data
+fviz_pca_biplot(pca_data, repel = TRUE) +
+  labs(title = "PCA Biplot of All Data") +
+  theme_minimal(base_size = 16) +
+  theme(
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold"),
+    legend.position = "top",
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text = element_text(color = "black")
+  )
 
 
 ###############################################################################
@@ -154,7 +222,6 @@ library(NbClust)
 fviz_nbclust(pca_data, kmeans, method = "wss") +
   geom_vline(xintercept = 4, linetype = 2)+
   labs(subtitle = "Elbow method")
-
 
 k <- 3  # number of clusters
 set.seed(123)  # for reproducibility
@@ -194,7 +261,7 @@ cluster_plot <- fviz_cluster(list(data = pca_data$ind$coord[,1:2], cluster = kme
 text(pca_data$ind$coord[,1], pca_data$ind$coord[,2], labels = data$ID)
 
 # Save the PCA plot
-ggsave(file.path(results_dir, "pca_plot.png"), pca_plot)
+ggsave(file.path(results_dir, "pca_plot.svg"), pca_plot)
 
 # Show the plot
 pca_plot
@@ -228,8 +295,6 @@ fviz_nbclust(pca_data$ind$coord, kmeans, method = 'wss')
 # Perform k-means clustering on the PCA scores
 install.packages("NbClust")
 library(NbClust)
-
-#
 
 # Perform clustering on males
 m <- subset(pca_data$ind$coord, Sex == "M")
@@ -305,10 +370,10 @@ text(m[,1], m[,2], labels = data$ID[Sex == "M"])
 text(f[,1], f[,2], labels = data$ID[Sex == "F"])
 
 # Save the PCA plot for males
-ggsave(file.path(results_dir, "pca_plot_males.png"), pca_plot)
+ggsave(file.path(results_dir, "pca_plot_males.svg"), pca_plot)
 
 # Save the PCA plot for females
-ggsave(file.path(results_dir, "pca_plot_females.png"), pca_plot)
+ggsave(file.path(results_dir, "pca_plot_females.svg"), pca_plot)
 
 # Save the cluster plot for males as SVG
 ggsave(file.path(results_dir, "cluster_plot_males.svg"), cluster_plot_males)
@@ -390,6 +455,33 @@ fviz_nbclust(pca_data$ind$coord[Sex == "F", ], kmeans, method = 'wss')
 
 
 
+#' DLScluster Analysis Script
+#'
+#' This script performs principal component analysis (PCA) on a dataset and applies k-means clustering on the PCA coordinates.
+#' The workflow includes computation of within-cluster sum of squares and silhouette widths to help determine the optimal
+#' number of clusters using both the elbow method and silhouette analysis.
+#'
+#' The script performs the following steps:
+#' \itemize{
+#'   \item Excludes specific columns (e.g., "ID", "Batch") from the dataset prior to PCA.
+#'   \item Executes PCA on the processed data, considering supplementary qualitative factors (e.g., "Group", "Sex").
+#'   \item Applies k-means clustering to the first two principal components.
+#'   \item Computes and stores the total within-cluster sum of squares (wss) for the specified number of clusters.
+#'   \item Calculates silhouette scores to assess the quality of clustering.
+#'   \item Generates visualizations including the elbow plot, silhouette plot, and clustering plots (with parallel coordinates and
+#'        convex ellipses around clusters).
+#'   \item Performs clustering separately for subgroups (males and females) and saves their corresponding plots.
+#'   \item Exports the generated plots as SVG files to a specified results directory.
+#' }
+#'
+#' @note The script requires the following R packages: factoextra, ggplot2, dplyr, and cluster.
+#'       Additionally, the dataset (and its relevant subsets such as male_pca_data and female_pca_data) as well as
+#'       the output directory variable (results_dir) must be defined before executing this script.
+#'
+#' @author [Your Name]
+#'
+#' @details This script is intended for cluster analysis and visualization of high-dimensional data via PCA and k-means clustering.
+#'          It is particularly useful for identifying and validating natural grouping within the dataset.
 
 # Load required libraries
 library(factoextra)
@@ -420,7 +512,6 @@ for (i in seq_along(k_values)) {
   # Print class of silhouette object
   print(class(sil_obj))
 }
-
 
 # Plot within-cluster sum of squares (Elbow method)
 plot(k_values, wss, type = "b", pch = 19, frame = FALSE, 
@@ -519,7 +610,58 @@ ggsave(file.path(results_dir, "cluster_plot_female.svg"), cluster_plot_female, d
 
 
 
-# cluster analysis on raw data, no PCA beforehand
+#' Cluster Analysis on Raw Data Without Prior PCA
+#'
+#' This script performs a cluster analysis on raw data without conducting a prior PCA. It reads experimental 
+#' data along with animal group information from external files, processes and standardizes the data, and then 
+#' applies k-means clustering separately for each sex group. The analysis includes generating diagnostic plots such 
+#' as the elbow plot (for determining the optimal number of clusters), silhouette plots (to assess clustering quality), 
+#' and PCA-based visualizations of the clusters.
+#'
+#' The key steps in this script include:
+#' \enumerate{
+#'   \item Reading in behavioral data from an Excel file and group-specific animal identifiers from CSV files.
+#'   \item Relabeling specific groups based on susceptibility (from "SIS" to "SUS" or "RES").
+#'   \item Filtering the data for each specified sex, handling missing values, and scaling the data.
+#'   \item Determining the optimal number of clusters using the Elbow method and applying k-means clustering.
+#'   \item Saving diagnostic plots and clustering results to the specified results directory.
+#' }
+#'
+#' @section Dependencies:
+#' The script requires the following R packages: readxl, tidyverse, cluster, factoextra, ggplot2, and ggrepel.
+#'
+#' @section File Structure:
+#' The script expects the following file paths:
+#' \itemize{
+#'   \item Behavioral data: "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx"
+#'   \item Susceptible animals list: "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/sus_animals.csv"
+#'   \item Control animals list: "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/con_animals.csv"
+#'   \item Output directory for results: "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/PCA/noPCAcluster/<sheet_name>"
+#' }
+#'
+#' @section Function: perform_clustering
+#' 
+#' The function \code{perform_clustering} carries out the clustering analysis and visualization for a specified 
+#' sex group.
+#'
+#' @param data A data frame containing the experimental behavioral data with metadata (such as ID, Group, and Sex) 
+#'             along with variables used for clustering.
+#' @param sex A character string specifying the sex group (e.g., "M" or "F") to filter and perform clustering on.
+#'
+#' @details
+#' \itemize{
+#'   \item The function filters the data for the provided sex.
+#'   \item It excludes the first four columns (which typically contain metadata) and then handles missing values
+#'         by imputing them with the column means.
+#'   \item Data is standardized before applying k-means clustering.
+#'   \item The optimal number of clusters is determined via the Elbow method (with a visual vertical line at 3 clusters).
+#'   \item Post clustering, diagnostic plots including elbow, silhouette, and PCA-based plots are created and saved.
+#'   \item The clustering results, including the assigned cluster for each data point, are also saved to a CSV file.
+#' }
+#'
+#' @return None. The function's side effects include printing diagnostic plots to the console and saving output 
+#'         files (plots and CSVs) to the specified results directory.
+
 # Load necessary libraries
 library(readxl)
 library(tidyverse)
@@ -529,8 +671,8 @@ library(ggplot2)
 library(ggrepel)
 
 # Define the results directory and sheet name
-results_dir <- "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/PCA/pcaFollowedByCluster/"
-sheet_name <- "DLSsingleSlim"
+results_dir <- paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/PCA/noPCAcluster/", sheet_name)
+sheet_name <- "DLSsingleSlimNoBatch"
 
 # Read in the data
 data <- read_excel("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx", sheet = sheet_name)
@@ -543,65 +685,65 @@ data$Group <- ifelse(data$Group == "SIS" & data$ID %in% susAnimals, "SUS", ifels
 # Function to perform clustering and plotting for each sex
 perform_clustering <- function(data, sex) {
   cat("Processing for sex:", sex, "\n")
-  
+
   # Filter data for the specified sex
   data_sex <- data %>% filter(Sex == sex)
-  
+
   # Extract columns for clustering (excluding the first four columns)
   data_for_clustering_sex <- data_sex[, -(1:4)]
-  
+
   # Handle missing values
   data_for_clustering_sex <- data_for_clustering_sex %>%
     mutate(across(everything(), ~ ifelse(is.na(.), mean(., na.rm = TRUE), .)))
-  
+
   # Standardize the data
   scaled_data_sex <- scale(data_for_clustering_sex)
-  
+
   # Determine the optimal number of clusters using the Elbow method
   set.seed(42)
   elbow_plot <- fviz_nbclust(scaled_data_sex, kmeans, method = "wss") +
     geom_vline(xintercept = 3, linetype = 2) +
     labs(subtitle = paste("Elbow method for sex", sex))
-  
+
   print(elbow_plot)
-  
+
   # Save the elbow plot
   ggsave(filename = file.path(results_dir, paste0("elbow_plot_", sex, ".svg")), plot = elbow_plot, width = 8, height = 4)
-  
+
   # Perform K-Means clustering with the optimal number of clusters
   optimal_clusters <- 3  # Adjust based on elbow plot
   set.seed(42)
   kmeans_result <- kmeans(scaled_data_sex, centers = optimal_clusters, nstart = 25)
-  
+
   # Add the cluster labels to the original data
   data_sex$Cluster <- as.factor(kmeans_result$cluster)
-  
+
   # Save clustering results to a CSV file
   write_csv(data_sex %>% select(ID, Group, Sex, Cluster), file.path(results_dir, paste0("clustering_results_", sex, ".csv")))
-  
+
   # Calculate percentages of animals in each group for each cluster
   cluster_stats <- data_sex %>%
     group_by(Group, Cluster) %>%
     summarise(Percentage = n() / nrow(data_sex) * 100)
-  
+
   # Calculate silhouette widths
   sil_width <- silhouette(kmeans_result$cluster, dist(scaled_data_sex))
-  
+
   # Plot silhouette plot
   silhouette_plot <- fviz_silhouette(sil_width) +
     labs(title = paste("Silhouette plot for sex", sex))
-  
+
   print(silhouette_plot)
-  
+
   # Save the silhouette plot
   ggsave(filename = file.path(results_dir, paste0("silhouette_plot_", sex, ".svg")), plot = silhouette_plot, width = 6, height = 4)
-  
+
   # PCA for visualization
   pca_result <- prcomp(scaled_data_sex, scale. = TRUE)
   pca_data <- as.data.frame(pca_result$x)
   pca_data$Cluster <- data_sex$Cluster
   pca_data$Group <- data_sex$Group  # Include Group information
-  
+
   cluster_plot <- ggplot(pca_data, aes(x = PC1, y = PC2, color = Cluster, shape = Group)) +
     geom_point(size = 3) +
     labs(title = paste("Clusters Visualization for sex", sex),
@@ -610,7 +752,7 @@ perform_clustering <- function(data, sex) {
          shape = "Group") +
     theme_minimal() 
   print(cluster_plot)
-  
+
   # Save the cluster plot
   ggsave(filename = file.path(results_dir, paste0("clusters_visualization_", sex, ".svg")), plot = cluster_plot, width = 5, height = 4)
 }
@@ -630,9 +772,12 @@ for (sex in unique_sex) {
 
 
 
+#' Perform clustering and PCA on DLS data
+#' This script reads in DLS data, performs PCA, and then applies k-means clustering.
+#' #' @param sheet_name The name of the sheet in the Excel file to read data from.
+#' #' @return None. The function saves plots and clustering results to the specified directory.
 
 
-## Cluster data on PCA
 # Load necessary libraries
 library(readxl)
 library(tidyverse)
@@ -643,97 +788,136 @@ library(ggrepel)
 library(FactoMineR)
 
 # Define the results directory and sheet name
-results_dir <- "S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/PCA/pcaFollowedByCluster/"
-sheet_name <- "DLSsingleSlim"
+results_dir <- paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/PCA/pcaFollowedByCluster/", sheet_name)
+sheet_name <- "DLSsingleSlim_noBatchMaleRef"
 
 # Read in the data
 data <- read_excel("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/SIS_Analysis/E9_Behavior_Data.xlsx", sheet = sheet_name)
 susAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/sus_animals.csv")))
 conAnimals <- c(readLines(paste0("S:/Lab_Member/Tobi/Experiments/Exp9_Social-Stress/Analysis/con_animals.csv")))
 
-# Rename the group of animals that have the Group "SIS" and are in the susAnimals list to "SUS". If they are SIS but not in the susAnimals list, rename to "RES"
-data$Group <- ifelse(data$Group == "SIS" & data$ID %in% susAnimals, "SUS", ifelse(data$Group == "SIS" & !data$ID %in% susAnimals, "RES", data$Group))
+# Create the results directory if it doesn't exist
+if (!dir.exists(results_dir)) {
+  dir.create(results_dir)
+}
 
-# Function to perform clustering and plotting for each sex
-perform_clustering <- function(data, sex) {
-  cat("Processing for sex:", sex, "\n")
+# Define if sex is included as a factor
+sex_as_factor <- FALSE
+
+# Rename the group of animals that have the Group "SIS" and are in the susAnimals list to "SUS". 
+# If they are SIS but not in the susAnimals list, rename to "RES"
+data$Group <- ifelse(data$Group == "SIS" & data$ID %in% susAnimals, "SUS", 
+                     ifelse(data$Group == "SIS" & !data$ID %in% susAnimals, "RES", data$Group))
+
+# Function to perform clustering and plotting
+perform_clustering <- function(data, sex = NULL, sex_as_factor = TRUE) {
   
-  # Filter data for the specified sex
-  filtered_data <- data %>% filter(Sex == sex)
-  
-  # Extract columns for PCA
+  # Filter data for the specified sex if sex_as_factor is TRUE
+  if (sex_as_factor) {
+    cat("Processing for sex:", sex, "\n")
+    data_sex <- data %>% filter(Sex == sex)
+  } else {
+    cat("Processing for all sexes combined\n")
+    data_sex <- data
+  }
+
+  # Preserve the metadata (ID, Group, and Sex)
+  metadata <- data_sex[, 1:4]  # Assuming the first 4 columns are ID, Group, Sex, and some other metadata
+
+  # Extract columns for PCA (excluding metadata columns like ID, Group, etc.)
   data_for_pca <- data_sex[, -(1:4)]
-  
+
   # Handle missing values
-  data_for_pca <- data_for_pca %>%
-    mutate(across(everything(), ~ ifelse(is.na(.), mean(., na.rm = TRUE), .)))
-  
-  # PCA
-  pca_result <- PCA(data_for_pca, scale.unit = TRUE, ncp = 2)
-  filtered_data <- as.data.frame(pca_result$ind$coord)  # Extract principal component scores
-  
+  data_for_pca <- data_for_pca %>% mutate(across(everything(), ~ ifelse(is.na(.), mean(., na.rm = TRUE), .)))
+
+  # Perform PCA
+  pca_result <- PCA(data_for_pca, scale.unit = TRUE, ncp = 5)
+
+  # Extract principal components
+  pca_data <- as.data.frame(pca_result$ind$coord)
+
+  # Combine PCA results with the original metadata
+  data_sex <- cbind(metadata, pca_data)
+
+  # Save Variable Contribution Plots for each of the top 5 dimensions
+  for (dim in 1:5) {
+    contrib_plot <- fviz_contrib(pca_result, choice = "var", axes = dim, top = 10) + 
+      labs(title = paste("Variable Contribution - PC", dim, ifelse(sex_as_factor, paste("for sex", sex), "for all sexes combined")))
+
+    # Print the contribution plot
+    print(contrib_plot)
+
+    # Save the plot
+    ggsave(filename = file.path(results_dir, paste0("variable_contrib_PC", dim, ifelse(sex_as_factor, paste("_", sex), "_combined"), ".svg")), plot = contrib_plot)
+  }
+
   # Determine the optimal number of clusters using the Elbow method
   set.seed(42)
   elbow_plot <- fviz_nbclust(pca_data, kmeans, method = "wss") +
     geom_vline(xintercept = 3, linetype = 2) +
-    labs(subtitle = paste("Elbow method for sex", sex))
-  
+    labs(subtitle = ifelse(sex_as_factor, paste("Elbow method for sex", sex), "Elbow method for all sexes combined"))
+
   print(elbow_plot)
-  
+
   # Save the elbow plot
-  ggsave(filename = file.path(results_dir, paste0("elbow_plot_", sex, ".svg")), plot = elbow_plot, width = 8, height = 4)
-  
+  ggsave(filename = file.path(results_dir, paste0("elbow_plot_", ifelse(sex_as_factor, sex, "combined"), ".svg")))
+
   # Perform K-Means clustering with the optimal number of clusters
   optimal_clusters <- 3  # Adjust based on elbow plot
   set.seed(42)
   kmeans_result <- kmeans(pca_data, centers = optimal_clusters, nstart = 25)
-  
+
   # Add the cluster labels to the original data
   data_sex$Cluster <- as.factor(kmeans_result$cluster)
-  
+
   # Save clustering results to a CSV file
-  write_csv(data_sex[, c("ID", "Group", "Sex", "Cluster")], file.path(results_dir, paste0("clustering_results_", sex, ".csv")))
-  
+  write_csv(data_sex[, c("ID", "Group", "Sex", "Cluster")], file.path(results_dir, paste0("clustering_results_", ifelse(sex_as_factor, sex, "combined"), ".csv")))
+
   # Calculate percentages of animals in each group for each cluster
   cluster_stats <- data_sex %>%
     group_by(Group, Cluster) %>%
     summarise(Percentage = n() / nrow(data_sex) * 100)
-  
+
   # Calculate silhouette widths
   sil_width <- silhouette(kmeans_result$cluster, dist(pca_data))
-  
+
   # Plot silhouette plot
   silhouette_plot <- fviz_silhouette(sil_width) +
-    labs(title = paste("Silhouette plot for sex", sex))
-  
+    labs(title = ifelse(sex_as_factor, paste("Silhouette plot for sex", sex), "Silhouette plot for all sexes combined"))
+
   print(silhouette_plot)
-  
+
   # Save the silhouette plot
-  ggsave(filename = file.path(results_dir, paste0("silhouette_plot_", sex, ".svg")), plot = silhouette_plot, width = 6, height = 4)
-  
+  ggsave(filename = file.path(results_dir, paste0("silhouette_plot_", ifelse(sex_as_factor, sex, "combined"), ".svg")))
+
   # Plot PCA for visualization
   pca_data$Cluster <- data_sex$Cluster
   pca_data$Group <- data_sex$Group  # Include Group information
-  
+
   pca_plot <- ggplot(pca_data, aes(x = Dim.1, y = Dim.2, color = Cluster, shape = Group)) +
     geom_point(size = 3) +
-    labs(title = paste("PCA Visualization with Clusters for sex", sex),
+    labs(title = ifelse(sex_as_factor, paste("PCA Visualization with Clusters for sex", sex), "PCA Visualization with Clusters for all sexes combined"),
          x = "Principal Component 1",
          y = "Principal Component 2",
          shape = "Group") +
     theme_minimal() +
-    scale_color_manual(values = c("#FF7E47", "#FFBB49", "#6BCAEB"))  # Set color palette
-  
+    scale_color_manual(values = c("#FF7E47", "#FFBB49", "#6BCAEB"))  # Set cluster colors
+
   print(pca_plot)
-  
+
   # Save the PCA plot
-  ggsave(filename = file.path(results_dir, paste0("pca_visualization_", sex, ".svg")), plot = pca_plot, width = 5, height = 4)
+  ggsave(filename = file.path(results_dir, paste0("pca_visualization_", ifelse(sex_as_factor, sex, "combined"), ".svg")))
 }
 
-# Perform clustering for each sex group
-unique_sex <- unique(data$Sex)
-for (sex in unique_sex) {
-  perform_clustering(data, sex)
+# Perform clustering based on whether sex is a factor
+if (sex_as_factor) {
+  unique_sex <- unique(data$Sex)
+  for (sex in unique_sex) {
+    perform_clustering(data, sex, sex_as_factor)
+  }
+} else {
+  # Perform clustering for all data combined (without sex as a factor)
+  perform_clustering(data, sex_as_factor = FALSE)
 }
 
 
@@ -762,6 +946,42 @@ for (sex in unique_sex) {
 
 
 
+
+
+
+#' @title Clustering Analysis for DLSzscore Data
+#'
+#' @description
+#' This script performs clustering analysis on the DLSzscore dataset using both k-means and DBSCAN algorithms.
+#' It computes the within-cluster sum of squares (WSS) and silhouette scores for a range of cluster values in order
+#' to determine the optimal number of clusters. The script then performs k-means clustering with the optimal k,
+#' visualizes the cluster assignments via PCA-based plots and parallel coordinates plots, and finally applies DBSCAN
+#' clustering for additional insights.
+#'
+#' @details
+#' The following steps are executed:
+#' \itemize{
+#'   \item Calculation of within-cluster sum of squares (WSS) for varying number of clusters (k) in k-means.
+#'   \item Computation of silhouette scores for each k to evaluate clustering quality.
+#'   \item Determination of the optimal number of clusters based on the highest silhouette score.
+#'   \item Execution of k-means clustering with the chosen optimal number of clusters.
+#'   \item Visualization of clustering results using:
+#'         \itemize{
+#'           \item An elbow plot for WSS.
+#'           \item A silhouette plot.
+#'           \item PCA-based cluster plots with added individual ID labels.
+#'           \item Parallel coordinates plots colored by cluster.
+#'         }
+#'   \item Application of DBSCAN clustering on the first two principal components.
+#'   \item Visualization of the DBSCAN clustering results.
+#' }
+#'
+#' @note
+#' Ensure that the DLSzscore object, particularly \code{DLSzscore$ind$coord} (containing the coordinates) and
+#' \code{DLSzscore$ind$ID} (containing the individual identifiers), is properly defined in the environment.
+#'
+#' @import factoextra ggplot2 dplyr cluster fpc dbscan
+#'
 
 # Load required libraries
 library(factoextra)
