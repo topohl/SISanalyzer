@@ -1,7 +1,50 @@
-# This script installs and loads necessary libraries, reads data from an Excel file,
-# updates the Cluster column based on certain conditions, generates plots for each variable and sex,
-# performs statistical tests (T-test/Wilcoxon rank-sum test, post hoc pairwise tests for ANOVA/Kruskal-Wallis),
-# and applies customizations to the plots.
+#' Data Batch Clustering Analysis and Visualization
+#'
+#' This script performs data analysis and visualization for clustering experiments.
+#' It installs and loads required packages, reads experimental data from an Excel file,
+#' merges clustering results, and updates group classifications.
+#'
+#' Workflow Overview:
+#'   Package Setup: Checks and installs required packages, then loads them.
+#'   Data Import: Reads data from Excel and CSV files for SUS and clustering information.
+#'   Data Preparation: Merges data, updates group assignments based on susceptibility,
+#'                    and sets up factors.
+#'   Statistical Testing: For each variable and sex, the following are performed:
+#'       - Normality Check: Shapiro-Wilk tests per cluster.
+#'       - Pairwise Tests: Uses t-test or Wilcoxon rank-sum test when only two clusters exist.
+#'       - Multi-group Comparison: Applies ANOVA (with effect size calculation and Bonferroni-corrected
+#'                                pairwise tests) or Kruskal-Wallis (with Dunn's test using Holm correction)
+#'                                when more than two clusters are present.
+#'   Visualization: Generates ggplot2-based plots with custom themes, and saves plots and dendrograms as SVG files.
+#'
+#' Functions:
+#'   generate_plot:
+#'       Creates a ggplot for a given variable and sex using jittered points,
+#'       summary statistics, custom color scales, and a minimal theme.
+#'
+#'   perform_wilcoxon_test:
+#'       Executes a Wilcoxon rank-sum test between two clusters given a minimum sample size;
+#'       returns NULL if the sample size is insufficient.
+#'
+#'   perform_posthoc_anova:
+#'       Performs ANOVA for a variable grouped by clusters, calculates effect size (eta squared),
+#'       and conducts pairwise t-tests with Bonferroni correction.
+#'
+#'   perform_posthoc_kruskal:
+#'       Conducts a Kruskal-Wallis test when normality assumptions are not met,
+#'       followed by Dunn's pairwise tests with Holm correction.
+#'
+#'   test_and_plot_variable:
+#'       Filters data by sex, performs normality assessments, selects the appropriate statistical test,
+#'       and generates corresponding plots; returns a list containing test results, plot, and post hoc results.
+#'
+#'   generate_dendrogram:
+#'       Generates and saves a dendrogram using hierarchical clustering on numeric data,
+#'       assigns cluster-specific colors to leaf labels, and exports an SVG file.
+#'
+#' Output:
+#'   CSV Files: Test results and post hoc analysis results are saved as CSV files in a designated results directory.
+#'   SVG Files: Variable-specific plots and dendrogram visualizations are exported as SVG files for both males and females.
 
 # Install libraries if not already installed
 requiredPackages <- c("scales", "ggplot2", "dplyr", "openxlsx", "rstatix", "readxl", "svglite", "ggpubr", "cowplot", "reshape2", "ggradar", "devtools", "fmsb", "dendextend")
@@ -39,8 +82,6 @@ group_cols <- c("#FF7E47", "#FFBB49", "#6BCAEB")  # Orange, Yellow, Light Blue, 
 #group_cols <- c("#FFB6C1", "#FFE4B5", "#FF6347")  # Pastel Pink, Moccasin, Tomato
 #group_cols <- c("#98FB98", "#FFE4B5", "#FFD700")  # Pale Green, Moccasin, Gold
 
-
-
 # Factors to be used in the ANOVA or pairwise tests
 factors <- c("Cluster")
 
@@ -69,7 +110,7 @@ data <- merge(data, clusterAnimals[, c("ID", "Cluster")], by = "ID", all.x = TRU
 # Update the Group column based on the ID and susAnimals
 data <- data %>%
   mutate(Group = if_else(ID %in% susAnimals, "SUS",
-                        if_else(Group == "SIS", "RES", Group)))
+                         if_else(Group == "SIS", "RES", Group)))
 
 # set Cluster as discrete variable
 data$Cluster <- as.factor(data$Cluster)
@@ -78,9 +119,9 @@ data$Cluster <- as.factor(data$Cluster)
 generate_plot <- function(data, variable_name, sex) {
   filtered_data <- data %>%
     filter(Sex == sex)
-    
-# Create the plot using ggplot
-p <- ggplot(filtered_data, aes(Cluster, .data[[variable_name]], color = Cluster)) +
+
+  # Create the plot using ggplot
+  p <- ggplot(filtered_data, aes(Cluster, .data[[variable_name]], color = Cluster)) +
     # Customize the axes and labels
     scale_x_discrete(name = NULL, expand = c(0.3, 0.1)) + 
     scale_y_continuous(expand = c(0.1, 0.1)) +
@@ -96,9 +137,9 @@ p <- ggplot(filtered_data, aes(Cluster, .data[[variable_name]], color = Cluster)
       width = 1) +  # Set the width of the quantile line to 0.5
     # Customize the plot labels and colors
     labs(title = bquote(~bold(.(variable_name))),
-        subtitle = paste("(", sex, ")", sep = ""),
-        x = NULL,
-        y = "z score [a.u.]") +
+         subtitle = paste("(", sex, ")", sep = ""),
+         x = NULL,
+         y = "z score [a.u.]") +
     scale_color_manual(name = NULL, values = group_cols) +
     scale_fill_manual(name = NULL, values = group_cols) +
     # Customize the plot theme
@@ -128,7 +169,7 @@ perform_posthoc_anova <- function(data, variable_name) {
 
   # Perform effecz size calculation
   eta_squared <- eta_squared(anova_test)
-  
+
   # Perform pairwise t-test with Bonferroni correction
   pairwise_results <- pairwise_t_test(data, formula = as.formula(paste(variable_name, "~ Cluster")),
                                       p.adjust.method = "bonferroni")
@@ -145,11 +186,11 @@ perform_posthoc_anova <- function(data, variable_name) {
 perform_posthoc_kruskal <- function(data, variable_name) {
   # Perform Kruskal-Wallis test
   kruskal_test <- kruskal.test(as.formula(paste(variable_name, "~ Cluster")), data = data)
-  
+
   # Perform pairwise Dunn's test with Holm correction
   pairwise_results <- dunn_test(data, formula = as.formula(paste(variable_name, "~ Cluster")),
                                 p.adjust.method = "holm")
-  
+
   # Add a column specifying the Cluster comparison
   pairwise_results$Cluster_Comparison <- paste(pairwise_results$cluster1, "vs.", pairwise_results$cluster2)
   # Add column indicating the type of multiple comparison correction
@@ -161,29 +202,29 @@ perform_posthoc_kruskal <- function(data, variable_name) {
 test_and_plot_variable <- function(data, variable_name, sex) {
   filtered_data <- data %>%
     filter(Sex == sex)
-  
+
   # Perform normality test for each Cluster
   unique_clusters <- unique(filtered_data$Cluster)
   num_clusters <- length(unique_clusters)
-    
+
   if (num_clusters == 2) {
     # Perform pairwise comparisons for cases with two clusters
     cluster1 <- unique_clusters[1]
     cluster2 <- unique_clusters[2]
-      
+
     data_cluster1 <- filtered_data[[variable_name]][filtered_data$Cluster == cluster1]
     data_cluster2 <- filtered_data[[variable_name]][filtered_data$Cluster == cluster2]
-      
+
     # Check if there are enough observations in both Clusters
     if (sum(!is.na(data_cluster1)) >= 3 && sum(!is.na(data_cluster2)) >= 3) {
       cluster1_norm <- shapiro.test(data_cluster1)
       cluster2_norm <- shapiro.test(data_cluster2)
-      
+
       # Check if both Clusters are normally distributed
       if (cluster1_norm$p.value >= 0.05 && cluster2_norm$p.value >= 0.05) {
         # Perform t-test
         t_res <- t.test(data_cluster1, data_cluster2)
-        
+
         # Store test results in a list
         test_results <- list(
           Variable = variable_name,
@@ -198,12 +239,12 @@ test_and_plot_variable <- function(data, variable_name, sex) {
 
         # Generate the plot
         p <- generate_plot(filtered_data, variable_name, sex)
-        
+
         return(list(test_results = test_results, plot = p, posthoc_results = NULL))
       } else {
         # Perform Wilcoxon rank-sum test
         wilcox_res <- perform_wilcoxon_test(data_cluster1, data_cluster2)
-        
+
         # Check if the Wilcoxon test could be performed
         if (!is.null(wilcox_res)) {
           # Store test results in a list
@@ -217,10 +258,10 @@ test_and_plot_variable <- function(data, variable_name, sex) {
             P_Value = wilcox_res$p.value,
             Significance_Level = sprintf("%.3f", wilcox_res$p.value)
           )
-            
+
           # Generate the plot
           p <- generate_plot(filtered_data, variable_name, sex)
-          
+
           return(list(test_results = test_results, plot = p, posthoc_results = NULL))
         }
       }
@@ -229,7 +270,7 @@ test_and_plot_variable <- function(data, variable_name, sex) {
     # Perform normality test for each Cluster
     cluster1_norm <- shapiro.test(filtered_data[[variable_name]][filtered_data$Cluster == "1"])
     cluster2_norm <- shapiro.test(filtered_data[[variable_name]][filtered_data$Cluster == "2"])
-      
+
     # Check if there is at least one sample in the SUS Cluster for the specified sex
     cluster3_exists <- any(filtered_data$Cluster == "3")
     if (cluster3_exists) {
@@ -237,12 +278,12 @@ test_and_plot_variable <- function(data, variable_name, sex) {
     } else {
       cluster3_norm <- list(p.value = 1)  # Set p-value to 1 when SUS Cluster is missing
     }
-      
+
     # Check if any of the normality tests result in a missing value (i.e., not enough observations in a Cluster)
     if (is.na(cluster1_norm$p.value) || is.na(cluster2_norm$p.value) || is.na(cluster3_norm$p.value)) {
       return(NULL) # Return NULL if there are not enough observations in one of the Clusters
     }
-      
+
     # Store test results in a list
     test_results <- list(
       Variable = variable_name,
@@ -251,11 +292,11 @@ test_and_plot_variable <- function(data, variable_name, sex) {
       cluster2_Normality = cluster2_norm$p.value,
       cluster3_Normality = cluster3_norm$p.value
     )
-      
+
     # Create empty data frames to store test results and post hoc results
     test_results_df <- data.frame()
     posthoc_results_df <- data.frame()
-      
+
     # Check if there are more than two Clusters
     if (num_clusters > 2) {
       # Perform ANOVA if all clusters are normal, otherwise use Kruskal-Wallis
@@ -266,7 +307,7 @@ test_and_plot_variable <- function(data, variable_name, sex) {
         test_results$P_Value <- summary(anova_test)[[1]][["Pr(>F)"]][1]
         test_results$Significance_Level <- sprintf("%.3f", test_results$P_Value)
         test_results$Eta_Squared <- eta_squared(anova_test)
-          
+
         # Perform post hoc pairwise tests for ANOVA and store results
         posthoc_results_df <- perform_posthoc_anova(filtered_data, variable_name)
       } else {
@@ -284,11 +325,11 @@ test_and_plot_variable <- function(data, variable_name, sex) {
 
         # Store effect size in test_results
         test_results$Eta_Squared <- as.numeric(sprintf("%.3f", effect_size))
-          
+
         # Perform post hoc pairwise tests for Kruskal-Wallis and store results
         posthoc_results_df <- perform_posthoc_kruskal(filtered_data, variable_name)
       }
-        
+
       # Merge posthoc_results_df with test_results_df if both data frames have the same columns
       if (!is.null(posthoc_results_df) && ncol(posthoc_results_df) > 0) {
         # Check if test_results_df and posthoc_results_df have the same columns
@@ -300,10 +341,10 @@ test_and_plot_variable <- function(data, variable_name, sex) {
         }
       }
     }
-    
+
     # Generate the plot
     p <- generate_plot(filtered_data, variable_name, sex)
-      
+
     return(list(test_results = test_results, plot = p, posthoc_results = test_results_df))
   }
 }
@@ -314,102 +355,101 @@ columns_to_plot <- setdiff(names(data), c("ID", "Group", "Sex", "Batch", "Cluste
 # Initialize empty lists to store test results and plots
 all_test_results <- list()
 all_plots <- list()
-  all_posthoc_results <- list()
+all_posthoc_results <- list()
 
-  # Iterate through each variable and sex, and perform tests
-  for (variable in columns_to_plot) {
-    for (sex in c("m", "f")) {
-      result <- test_and_plot_variable(data, variable, sex)
-      if (!is.null(result)) {
-        if (is.null(result$posthoc_results)) {
-          # Store test results for t-test
-          result$test_results$Sex <- sex  # Add sex column to test results
-          all_test_results <- c(all_test_results, list(result$test_results))
-        } else {
-          # Store test results for Kruskal-Wallis
-          result$test_results$Sex <- sex  # Add sex column to test results
-          result$posthoc_results$Sex <- sex  # Add sex column to posthoc results
-          all_test_results <- c(all_test_results, list(result$test_results))
-          all_posthoc_results <- c(all_posthoc_results, list(result$posthoc_results))
-        }
-        all_plots <- c(all_plots, list(result$plot))
+# Iterate through each variable and sex, and perform tests
+for (variable in columns_to_plot) {
+  for (sex in c("m", "f")) {
+    result <- test_and_plot_variable(data, variable, sex)
+    if (!is.null(result)) {
+      if (is.null(result$posthoc_results)) {
+        # Store test results for t-test
+        result$test_results$Sex <- sex  # Add sex column to test results
+        all_test_results <- c(all_test_results, list(result$test_results))
+      } else {
+        # Store test results for Kruskal-Wallis
+        result$test_results$Sex <- sex  # Add sex column to test results
+        result$posthoc_results$Sex <- sex  # Add sex column to posthoc results
+        all_test_results <- c(all_test_results, list(result$test_results))
+        all_posthoc_results <- c(all_posthoc_results, list(result$posthoc_results))
       }
+      all_plots <- c(all_plots, list(result$plot))
     }
   }
+}
 
-  # Convert the list of test results to a data frame
-  all_test_results_df <- bind_rows(all_test_results)
+# Convert the list of test results to a data frame
+all_test_results_df <- bind_rows(all_test_results)
 
-  # Save the test results data frame to a CSV file
-  write.csv(all_test_results_df, file = paste0(result_dir, "test_results_", sheet_name, ".csv"), row.names = FALSE)
+# Save the test results data frame to a CSV file
+write.csv(all_test_results_df, file = paste0(result_dir, "test_results_", sheet_name, ".csv"), row.names = FALSE)
 
-  # Save the post hoc results to a CSV file
-  if (!is.null(all_posthoc_results) && length(all_posthoc_results) > 0) {
-    all_posthoc_results_df <- bind_rows(all_posthoc_results)
-    write.csv(all_posthoc_results_df, file = paste0(result_dir, "posthoc_results_", sheet_name, ".csv"), row.names = FALSE)
+# Save the post hoc results to a CSV file
+if (!is.null(all_posthoc_results) && length(all_posthoc_results) > 0) {
+  all_posthoc_results_df <- bind_rows(all_posthoc_results)
+  write.csv(all_posthoc_results_df, file = paste0(result_dir, "posthoc_results_", sheet_name, ".csv"), row.names = FALSE)
+}
+
+# Save the plots for males and females separately
+for (i in seq_along(all_plots)) {
+  # Extract the variable name from the corresponding test results
+  variable_name <- all_test_results[[i]]$Variable
+
+  if (i %% 2 == 0) {
+  ggsave(filename = paste0(result_dir, "female_", variable_name, ".svg"), plot = all_plots[[i]], width = 2.8, height = 3)
+  } else {
+  ggsave(filename = paste0(result_dir, "male_", variable_name, ".svg"), plot = all_plots[[i]], width = 2.8, height = 3)
   }
-
-  # Save the plots for males and females separately
-  for (i in seq_along(all_plots)) {
-    # Extract the variable name from the corresponding test results
-    variable_name <- all_test_results[[i]]$Variable
-      
-    if (i %% 2 == 0) {
-      ggsave(filename = paste0(result_dir, "female_", variable_name, ".svg"), plot = all_plots[[i]], width = 2.8, height = 3)
-    } else {
-      ggsave(filename = paste0(result_dir, "male_", variable_name, ".svg"), plot = all_plots[[i]], width = 2.8, height = 3)
-    }
-  }
-
+}
 
 # Generate dendrograms for males and females and save them as SVG files with marked clusters
 generate_dendrogram <- function(data, sex, result_dir, clusterAnimals) {
   filtered_data <- data %>%
     filter(Sex == sex)
-  
+
   # Debug information
   #message("Number of data points for sex '", sex, "': ", nrow(filtered_data))
   #message("Columns before select: ", paste(colnames(filtered_data), collapse = ", "))
-  
+
   # Select numeric columns
   numeric_columns <- dplyr::select(filtered_data, -ID, -Group, -Sex, -Cluster, -Batch)
-  
+
   # Check if there are enough rows for clustering
   if (nrow(numeric_columns) < 2) {
     #message("Not enough data points for sex: ", sex)
     return(NULL)
   }
-  
+
   # Debug information
   #message("Columns after select: ", paste(colnames(numeric_columns), collapse = ", "))
-  
+
   # Compute the distance matrix
   distance_matrix <- dist(numeric_columns)
-  
+
   # Perform hierarchical clustering
   clustering <- hclust(distance_matrix, method = "ward.D2")
-  
+
   # assign IDs to the clustering
   clustering$labels <- filtered_data$ID
 
   # Generate the dendrogram
   dendrogram <- as.dendrogram(clustering)
-  
+
   # show dendrogram labels
   #labels(dendrogram) <- filtered_data$ID
-  
+
   # Extracting the IDs from clusterAnimals
   #actual_ids <- clusterAnimals$ID
-  
+
   # Assigning the actual IDs to the dendrogram labels
   #labels(dendrogram) <- actual_ids
-  
+
   # Get unique clusters
   unique_clusters <- unique(clusterAnimals$Cluster)
-  
+
   # Assign colors to clusters
   cluster_colors <- rainbow(length(unique_clusters))
-  
+
   # Function to assign colors to clusters
   assign_cluster_colors <- function(cluster) {
     cluster_color <- switch(cluster,
@@ -419,7 +459,7 @@ generate_dendrogram <- function(data, sex, result_dir, clusterAnimals) {
                             "#FF7E47")  # Default color if cluster value is not found
     return(cluster_color)
   }
-  
+
   # Assign colors to dendrogram labels based on clusters
   dendrogram <- dendrapply(dendrogram, function(d) {
     if (is.leaf(d)) {
@@ -432,16 +472,15 @@ generate_dendrogram <- function(data, sex, result_dir, clusterAnimals) {
     }
     return(d)
   })
-  
+
   # Plot the dendrogram and save as SVG file
   svg_file <- paste0(result_dir, sex, "_dendrogram_with_clusters.svg")
   svg(svg_file)
   plot(dendrogram, main = paste("Dendrogram for", sex))
   dev.off()
-  
+
   message("Dendrogram for ", sex, " with clusters marked saved as:", svg_file)
 }
-
 
 # Call the function for males and females
 generate_dendrogram(data, "m", result_dir, clusterAnimals)
