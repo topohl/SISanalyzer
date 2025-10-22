@@ -58,13 +58,16 @@ get_optimal_pcs <- function(pca_obj) {
 data[, -c(1:4)] <- lapply(data[, -c(1:4)], function(x) as.numeric(as.character(x)))
 
 # Run PCA and extract optimal number of PCs for all data
-pca_data <- PCA(data[, -c(1:4)], graph = FALSE)
+pca_data <- PCA(data[, -c(1:4)], graph = FALSE, scale = TRUE)
 optimal_pcs <- get_optimal_pcs(pca_data)
 
 var <- get_pca_var(pca_data)
 
 # Define color palette
-group_cols <- c("#1e3791", "#00ac8c", "#F79719", "#1e3791", "#00ac8c", "#F79719")
+#group_cols <- c("#1e3791", "#00ac8c", "#F79719", "#1e3791", "#00ac8c", "#F79719")
+group_cols <- c("#d7c49eff", "#d7c49eff", "#d7c49eff", "#343148ff", "#343148ff", "#343148ff")
+#group_cols <- c("#457B9D", "#878787", "#E63946", "#457B9D", "#878787", "#E63946")
+
 
 # Define shape mapping based on Group and Sex:
 # female CON: full circle (16)
@@ -73,7 +76,8 @@ group_cols <- c("#1e3791", "#00ac8c", "#F79719", "#1e3791", "#00ac8c", "#F79719"
 # male SUS: open triangle (2)
 # female RES: full square (15)
 # male RES: open square (0)
-shape_mapping <- c("CON.f" = 16, "CON.m" = 1, "SUS.f" = 17, "SUS.m" = 2, "RES.f" = 15, "RES.m" = 0)
+#shape_mapping <- c("CON.f" = 16, "CON.m" = 1, "SUS.f" = 17, "SUS.m" = 2, "RES.f" = 15, "RES.m" = 0)
+shape_mapping <- c("CON.f" = 16, "CON.m" = 1, "SUS.f" = 16, "SUS.m" = 1, "RES.f" = 16, "RES.m" = 1)
 
 # Plot PCA with optimal number of PCs for all data - Clean, modern, and publication-ready
 pca_plot <- fviz_pca_ind(pca_data,
@@ -81,46 +85,100 @@ pca_plot <- fviz_pca_ind(pca_data,
   habillage = interaction(data$Group, data$Sex),
   palette = group_cols,
   addEllipses = TRUE,
+  ellipse.type = "confidence", # add confidence ellipses
+  ellipse.level = 0.95, # set ellipse level to 95% confidence interval
   ellipse.args = list(
-    linetype = "blank",  # no outer line
-    size = 0,            # no line width
-    alpha = 0.4
+    linetype = "solid",
+    size = 1,            # increased line width
+    alpha = 0.8          # changed ellipse line transparency (alpha) to 0.8
   ),
-  axes = c(1, 2),  # only plot PC1 and PC2 on x and y axis
-  choose.var = optimal_pcs,  # plot optimal number of PCs
-  pointsize = 2,  # increased symbol size
+  axes = c(1, 2),           # only plot PC1 and PC2 on x and y axis
+  choose.var = optimal_pcs, # plot optimal number of PCs
+  pointsize = 2,            # increased symbol size
+  stroke = 1,               # make symbol outlines thicker
   ggtheme = theme_classic(base_size = 16) +
             theme(
               plot.title = element_text(face = "bold", hjust = 0.5),
               axis.title = element_text(face = "bold"),
+              axis.text.x = element_text(size = 20, color = "black"),  # increased x-axis font
+              axis.text.y = element_text(size = 20, color = "black"),  # increased y-axis font
               legend.position = "top",
               panel.grid.major = element_blank(),
-              panel.grid.minor = element_blank(),
-              axis.text = element_text(color = "black")
+              panel.grid.minor = element_blank()
             )
 ) +
-  ggtitle("PCA of All Data") +
+  ggtitle(paste("PCA of", sheet_name)) +
   scale_shape_manual(values = shape_mapping) +
   coord_equal() +
   theme(aspect.ratio = 1)
 
-# make and display corrplot 
+# make, display and save corrplot
 corrplot(var$cos2, is.corr = FALSE,
-     method = "color",
-     col = colorRampPalette(c("white", "blue", "darkblue"))(200),
-     addCoef.col = "black",
-     number.cex = 0.7,
-     tl.cex = 0.8,
-     cl.align = "l",
-     title = "Variable Cos2",
-     mar = c(0, 0, 1, 0))
+  method = "color",
+  col = colorRampPalette(c("white", "blue", "darkblue"))(200),
+  addCoef.col = "black",
+  number.cex = 0.7,
+  tl.cex = 0.8,
+  cl.align = "l",
+  title = "Variable Cos2",
+  mar = c(0, 0, 1, 0))
+
+# Save a professional-looking corrplot as an SVG file with enhanced aesthetics and clear labeling
+svg(filename = file.path(results_dir, paste0("corrplot_", sheet_name, ".svg")),
+  width = 6, height = 5)
+
+corrplot(var$cos2,
+  is.corr = FALSE,
+  method = "color",
+  col = colorRampPalette(c("#d7c49eff", "#343148ff"))(200),
+  addCoef.col = "white",   # Coefficient numbers in white for optimal contrast
+  number.cex = 0.7,
+  tl.cex = 0.8,
+  tl.srt = 45,             # Rotate text labels for improved readability
+  tl.col = "black",        # Text labels in black for clarity
+  cl.align = "l",
+  title = "Variable Representation Quality (Cos2)",
+  mar = c(0, 0, 1, 0),     # Set margins to optimize layout
+  diag = FALSE             # Hide diagonal elements for a cleaner appearance
+)
+dev.off()
 
 # Save the PCA plot for all data
 ggsave(file.path(results_dir, paste0("pca_plot_", sheet_name, ".svg")), pca_plot, dpi = 300, height = 5, width = 6)
+# save the variable contributions as svg for the first 5 principal components
+for (i in 1:5) {
+  var_contrib <- fviz_contrib(pca_data, choice = "var", axes = i, top = 10, 
+                              fill = "#343148ff", color = "#343148ff") +
+    theme_minimal(base_family = "Helvetica") +
+    theme(
+      plot.title = element_text(size = 16, face = "bold", hjust = 0.5, color = "#2D2D2D"),
+      axis.title.x = element_text(size = 14, color = "#2D2D2D"),
+      axis.title.y = element_text(size = 14, color = "#2D2D2D"),
+      axis.text.x = element_text(size = 12, color = "#2D2D2D", angle = 90, hjust = 1),
+      axis.text.y = element_text(size = 12, color = "#2D2D2D"),
+      legend.title = element_text(size = 12, face = "bold", color = "#2D2D2D"),
+      legend.text = element_text(size = 12, color = "#2D2D2D"),
+      panel.border = element_blank(),
+      plot.background = element_rect(fill = "transparent", color = NA),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank()
+    ) +
+    labs(
+      title = paste("Variable Contribution - PC", i),
+      x = "Variable",
+      y = "Contribution (%)"
+    )
+  
+  # Save the variable contribution plot
+  ggsave(
+    file.path(results_dir, paste0("var_contrib_", sheet_name, "_PC", i, ".svg")),
+    var_contrib, dpi = 300, height = 5, width = 6
+  )
+}
 
 # Perform separate PCA for males (m)
 male_data <- data[data$Sex == "m", ]
-male_pca_data <- PCA(male_data[, -c(1:4, which(names(male_data) == "CombZ"))], graph = FALSE)
+male_pca_data <- PCA(male_data[, -c(1:4, which(names(male_data) == "CombZ"))], graph = FALSE, scale = TRUE)
 male_optimal_pcs <- get_optimal_pcs(male_pca_data)
 
 # Define color palette for males
@@ -141,7 +199,7 @@ ggsave(file.path(results_dir, paste0("pca_plot_males_", sheet_name, ".svg")), ma
 
 # Perform separate PCA for females (f)
 female_data <- data[data$Sex == "f", ]
-female_pca_data <- PCA(female_data[, -c(1:4, which(names(female_data) == "CombZ"))], graph = FALSE)
+female_pca_data <- PCA(female_data[, -c(1:4, which(names(female_data) == "CombZ"))], graph = FALSE, scale = TRUE)
 female_optimal_pcs <- get_optimal_pcs(female_pca_data)
 
 # Define color palette for males
@@ -163,7 +221,7 @@ ggsave(file.path(results_dir, paste0("pca_plot_females_", sheet_name, ".svg")), 
 # Generate variable contribution plots for each sex and the first 5 principal components
 for (sex in unique(data$Sex)) {
   sex_data <- data[data$Sex == sex, ]
-  sex_pca_data <- PCA(sex_data[, -c(1:4, which(names(sex_data) == "CombZ"))], graph = FALSE)
+  sex_pca_data <- PCA(sex_data[, -c(1:4, which(names(sex_data) == "CombZ"))], graph = FALSE, scale = TRUE)
   
   for (i in 1:5) {
     var_contrib <- fviz_contrib(sex_pca_data, choice = "var", axes = i, top = 10) +
